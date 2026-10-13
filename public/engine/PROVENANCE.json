@@ -1,0 +1,26 @@
+{
+  "project": "OrcaWasm",
+  "repository": "https://github.com/Hiosdra/OrcaWasm",
+  "commit": "60a09e04f1990be39c8f6f35dffef1a2c9e224c4",
+  "release": "wasm-v2.4.2-patch29-multithreaded",
+  "releaseUrl": "https://github.com/Hiosdra/OrcaWasm/releases/tag/wasm-v2.4.2-patch29-multithreaded",
+  "sourceUrl": "https://github.com/Hiosdra/OrcaWasm/tree/60a09e04f1990be39c8f6f35dffef1a2c9e224c4",
+  "sourceArchive": "/source/orcawasm-source.zip",
+  "sourceArchiveSha256": "21046c2c502ce555b85cdc590a93882ece75432da6694fa7fd8bc43708486a51",
+  "orcaVersion": "2.4.2",
+  "orcaCommit": "8500fcdccaa10b5099ac20d252af3a7c560046f1",
+  "orcaSourceUrl": "https://github.com/OrcaSlicer/OrcaSlicer/tree/8500fcdccaa10b5099ac20d252af3a7c560046f1",
+  "apiVersion": "0.7.0",
+  "retrieved": "2026-10-13",
+  "artifactsUnmodified": true,
+  "wasmStorage": {
+    "parts": ["slicer-mt.wasm.part0", "slicer-mt.wasm.part1"],
+    "splitAtBytes": 16777216,
+    "totalBytes": 29019444,
+    "note": "Concatenate in order to recreate the unmodified release binary. Split for static hosting per-file limits."
+  },
+  "sha256": {
+    "slicer-mt.js": "2ec6dced8758befae27f0e7adc7cb18273b14fb5db49f90c61876656ba2500fc",
+    "slicer-mt.wasm": "34614074e543bf51ca923606279673efaf8b628f80b513b96cb51c923ed574b0"
+  }
+}

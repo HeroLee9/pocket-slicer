@@ -1,0 +1,44 @@
+Pocket Slicer engine source and build information
+Verified 2026-10-13
+
+Engine release:
+https://github.com/Hiosdra/OrcaWasm/releases/tag/wasm-v2.4.2-patch29-multithreaded
+
+The release tag resolves to this exact source commit (verified with git ls-remote):
+60a09e04f1990be39c8f6f35dffef1a2c9e224c4
+https://github.com/Hiosdra/OrcaWasm/tree/60a09e04f1990be39c8f6f35dffef1a2c9e224c4
+
+Download the exact tracked OrcaWasm source:
+./orcawasm-source.zip
+SHA-256: 21046c2c502ce555b85cdc590a93882ece75432da6694fa7fd8bc43708486a51
+
+This ZIP was created using:
+git archive --format=zip --prefix=OrcaWasm-60a09e04/ 60a09e04f1990be39c8f6f35dffef1a2c9e224c4
+It contains the upstream bridge, compatibility patches, build scripts,
+configuration, vendored API glue, tests, LICENSE and NOTICE exactly as tracked.
+No locally downloaded binaries, untracked test output or local modifications
+are included. Pocket Slicer's own worker adapter is in the separate app source.
+
+The OrcaWasm repository downloads OrcaSlicer and third-party dependencies during
+its build; they are not vendored into this ZIP. The pinned OrcaSlicer release is
+v2.4.2, which resolves to:
+8500fcdccaa10b5099ac20d252af3a7c560046f1
+https://github.com/OrcaSlicer/OrcaSlicer/tree/8500fcdccaa10b5099ac20d252af3a7c560046f1
+Full source archive:
+https://github.com/OrcaSlicer/OrcaSlicer/archive/8500fcdccaa10b5099ac20d252af3a7c560046f1.zip
+
+Build instructions: README.md and scripts/build-local-wsl.sh in the ZIP.
+The complete dependency source locations and versions are recorded in:
+https://github.com/Hiosdra/OrcaWasm/blob/60a09e04f1990be39c8f6f35dffef1a2c9e224c4/.github/workflows/build-wasm.yml
+Toolchain: Emscripten 3.1.74. The bridge exposes one-slicer-api 0.7.0.
+OrcaWasm requires a threaded WebAssembly host with SharedArrayBuffer and
+cross-origin isolation.
+
+Published runtime files are the unmodified release slicer-mt.js and
+slicer-mt.wasm. The WASM is stored as two pieces only to fit static hosting
+per-file limits. Concatenating slicer-mt.wasm.part0 and slicer-mt.wasm.part1
+recreates the original 29,019,444-byte binary. Exact artifact hashes and source
+provenance are available at ../engine/PROVENANCE.json.
+
+Original upstream notices: ../engine/NOTICE.md
+Original upstream license: ../engine/LICENSE
