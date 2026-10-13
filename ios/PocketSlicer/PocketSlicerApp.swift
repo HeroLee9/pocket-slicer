@@ -1,6 +1,7 @@
 import SwiftUI
 
 @main
+@MainActor
 struct PocketSlicerApp: App {
     @StateObject private var session = SlicerSession()
 
@@ -48,8 +49,11 @@ final class SlicerSession: ObservableObject {
             guard let resources = Bundle.main.resourceURL else { throw LocalAssetServer.ServerError.missingAssets }
             let server = try LocalAssetServer(rootURL: resources.appendingPathComponent("web", isDirectory: true))
             self.server = server
+            let serverID = ObjectIdentifier(server)
             server.start { [weak self] result in
-                guard let self = self else { return }
+                // A cancelled startup must not overwrite a later retry's state.
+                guard let self = self, let currentServer = self.server,
+                      ObjectIdentifier(currentServer) == serverID else { return }
                 switch result {
                 case .success(let url):
                     self.baseURL = url

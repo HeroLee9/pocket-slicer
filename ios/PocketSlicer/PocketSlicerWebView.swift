@@ -1,6 +1,7 @@
 import SwiftUI
 import WebKit
 
+@MainActor
 struct PocketSlicerWebView: UIViewRepresentable {
     let url: URL
     @ObservedObject var session: SlicerSession
