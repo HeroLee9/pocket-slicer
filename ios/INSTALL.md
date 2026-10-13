@@ -6,15 +6,17 @@ Use the **PocketSlicer-unsigned.ipa** produced by a successful native build. If 
 
 ## 1. Prepare this Arch/Omarchy PC
 
-Read-only checks on October 13, 2026 found `libimobiledevice` and `webkit2gtk-4.1` installed, but no `usbmuxd`, no `fuse2`, and no connected iPhone. No software or services were changed.
+Read-only checks on October 13, 2026 found `libimobiledevice`, `webkit2gtk-4.1` and FUSE 3 installed, but no `usbmuxd` and no connected iPhone. No software or services were changed. This PC requires your Linux password for administrative commands; unattended sudo is unavailable.
 
-The following commands are setup instructions to run when ready:
+When ready, run this in a visible terminal on this Omarchy PC. The command requests your Linux password itself:
 
 ```sh
-sudo pacman -S --needed usbmuxd fuse2
+omarchy pkg add usbmuxd
 ```
 
-These are the [SideStore Linux USB prerequisite](https://docs.sidestore.io/docs/installation/prerequisites), the official [Arch usbmuxd package](https://archlinux.org/packages/extra/x86_64/usbmuxd/), and the [AppImage FUSE requirement on Arch](https://docs.appimage.org/user-guide/troubleshooting/fuse.html#setting-up-fuse-on-arch-linux).
+This installs the [SideStore Linux USB prerequisite](https://docs.sidestore.io/docs/installation/prerequisites) from the [official Arch repository](https://archlinux.org/packages/extra/x86_64/usbmuxd/). On generic Arch without Omarchy, use `sudo pacman -S --needed usbmuxd` instead. Reconnect the phone after installation; the package's udev/systemd integration should start the daemon. If it does not, run `sudo systemctl start usbmuxd.service`. [Upstream automatic activation](https://github.com/libimobiledevice/usbmuxd#usage).
+
+No additional FUSE package is needed for this downloaded AppImage: its embedded static runtime accepts the existing `fusermount3` helper. This was checked without launching iloader. [Runtime implementation at its embedded revision](https://github.com/AppImage/type2-runtime/blob/8f39b89/src/runtime/runtime.c#L389).
 
 The official **iloader v2.3.7 x86_64 AppImage** is already downloaded at `work/downloads/iloader-v2.3.7-linux-amd64.AppImage` relative to the original workspace. Its SHA-256 matches the [official release asset metadata](https://api.github.com/repos/nab138/iloader/releases/tags/v2.3.7):
 
