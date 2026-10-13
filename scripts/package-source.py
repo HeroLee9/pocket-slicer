@@ -12,6 +12,8 @@ for path in sorted(root.rglob('*')):
     if not path.is_file():
         continue
     relative = path.relative_to(root)
+    if relative.parts[:2] in {('ios', 'web'), ('ios', 'build')} or any(part.endswith(('.xcodeproj', '.xcworkspace', '.xcresult')) for part in relative.parts):
+        continue
     if any(part in excluded_dirs for part in relative.parts):
         continue
     if path.name.endswith(('.tsbuildinfo', '.wasm', '.wasm.part0', '.wasm.part1')):

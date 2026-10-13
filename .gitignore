@@ -5,3 +5,8 @@ dist/
 test-results/
 playwright-report/
 .openai/local/
+ios/web/
+ios/build/
+ios/*.xcodeproj/
+ios/*.xcworkspace/
+*.xcresult/

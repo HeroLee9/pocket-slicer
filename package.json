@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build && node scripts/write-offline-manifest.mjs",
     "preview": "vite preview --host 0.0.0.0",
     "test": "vitest run",
+    "prepare:ios": "node scripts/prepare-ios.mjs",
     "test:engine": "node scripts/test-engine-profiles.mjs"
   },
   "dependencies": {

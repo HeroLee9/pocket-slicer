@@ -2,7 +2,7 @@
 export type GcodeContent = string | Blob | ArrayBuffer | Uint8Array<ArrayBuffer>;
 
 export interface GcodeExportResult {
-  method: 'share' | 'download' | 'cancelled';
+  method: 'native' | 'share' | 'download' | 'cancelled';
   filename: string;
 }
 
@@ -61,8 +61,68 @@ export function downloadGcode(file: File): GcodeExportResult {
   return { method: 'download', filename: file.name };
 }
 
-/** Preferred iPhone path: share sheet → Save to Files → USB under Locations. */
+// Must match NativeFileExporter.maximumFileBytes. Base64 adds roughly one third
+// overhead, so reject oversized native messages before allocating their payload.
+export const MAX_NATIVE_GCODE_BYTES = 64 * 1024 * 1024;
+type NativeSaveReply = { status: 'saved' | 'cancelled'; filename?: string };
+type NativeSaveBridge = {
+  postMessage(payload: { version: 1; filename: string; byteLength: number; base64: string }): Promise<NativeSaveReply>;
+};
+
+function nativeSaveBridge(): NativeSaveBridge | undefined {
+  if (typeof window === 'undefined') return undefined;
+  const bridge = (window as Window & {
+    webkit?: { messageHandlers?: { nativeSaveGcode?: NativeSaveBridge } };
+  }).webkit?.messageHandlers?.nativeSaveGcode;
+  return typeof bridge?.postMessage === 'function' ? bridge : undefined;
+}
+
+export function isNativeFileExportAvailable(): boolean {
+  return nativeSaveBridge() !== undefined;
+}
+
+function nativeFilename(name: string): string {
+  const filename = gcodeFilename(name);
+  const encoder = new TextEncoder();
+  let stem = Array.from(filename.slice(0, -6)).map(character => /^[\uD800-\uDFFF]$/.test(character) ? '-' : character).join('');
+  // Count Unicode code points to avoid cutting a surrogate pair or exceeding
+  // filesystem limits with long emoji/non-ASCII model names.
+  while (encoder.encode(stem + '.gcode').byteLength > 200) {
+    stem = Array.from(stem).slice(0, -1).join('');
+  }
+  return `${stem || 'K1C-print'}.gcode`;
+}
+
+async function nativeExport(file: File, bridge: NativeSaveBridge): Promise<GcodeExportResult> {
+  if (!file.size || file.size > MAX_NATIVE_GCODE_BYTES) {
+    throw new Error('Native Files export supports G-code files up to 64 MB. Reduce the model size or print detail and slice again.');
+  }
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const encoded: string[] = [];
+  // Divisible by 3: each complete chunk has no padding, allowing safe joining.
+  // Bounded spread arguments also avoid JavaScript call stack limits.
+  const chunkSize = 24_576;
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    encoded.push(btoa(String.fromCharCode(...bytes.subarray(offset, offset + chunkSize))));
+  }
+  const filename = nativeFilename(file.name);
+  try {
+    const reply = await bridge.postMessage({ version: 1, filename, byteLength: bytes.length, base64: encoded.join('') });
+    if (reply?.status === 'cancelled') return { method: 'cancelled', filename };
+    if (reply?.status !== 'saved') throw new Error('Files did not confirm that the G-code was saved.');
+    return { method: 'native', filename };
+  } catch (error) {
+    // A native error or cancellation must never create a second browser download.
+    if (error instanceof Error && error.name === 'AbortError') return { method: 'cancelled', filename };
+    const detail = error instanceof Error ? error.message : (typeof error === 'string' ? error : 'Try saving again.');
+    throw new Error(`The G-code could not be saved to Files. ${detail}`, { cause: error });
+  }
+}
+
+/** Native iPhone Files picker, or Safari share sheet → Save to Files → USB. */
 export async function exportGcode(content: GcodeContent, name = 'K1C-print'): Promise<GcodeExportResult> {
   const file = createGcodeFile(content, name);
+  const native = nativeSaveBridge();
+  if (native) return nativeExport(file, native);
   return canShareGcode(file) ? shareGcode(file) : downloadGcode(file);
 }

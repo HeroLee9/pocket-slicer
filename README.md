@@ -2,6 +2,8 @@
 
 A browser app that runs the real OrcaSlicer engine locally on your device. Built for a Creality K1C and iPhone, with G-code export to Files or a connected USB drive. No model is uploaded for slicing.
 
+The installed iPhone version under [`ios/`](ios/README.md) bundles all application and engine files so it does not depend on a hosted website. Its native build and simulator test are separate from the browser checks described below; see that folder for current status and free sideloading requirements.
+
 ## Use on iPhone
 
 Open the app's HTTPS address in Safari. The first visit may reload once while the app prepares local slicing. Tap **Import model** or **Try a 20 mm cube**. Choose the nozzle, filament and print settings, then **Slice model**. Keep Safari open while slicing. Inspect the preview, tap **Save G-code**, and choose **Save to Files**. Select your USB drive under Locations. If the browser downloads instead, move the `.gcode` file to the drive in Files.
