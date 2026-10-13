@@ -1,0 +1,72 @@
+name: Build and test local iPhone app
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ios:
+    # Standard runners are free for public repositories. Never start a paid
+    # private-repository Mac job from this workflow.
+    if: ${{ github.event.repository.private == false }}
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install build tools
+        run: |
+          npm ci
+          brew install xcodegen
+          xcodebuild -version
+      - name: Check web app and bundle native test assets
+        run: |
+          npm test
+          python3 scripts/package-source.py
+          node scripts/prepare-ios.mjs --include-probe
+          xcodegen generate --spec ios/project.yml
+      - name: Select an iPhone simulator
+        run: |
+          xcrun simctl list devices available --json > /tmp/pocket-simulators.json
+          python3 - <<'PY'
+          import json, os
+          with open('/tmp/pocket-simulators.json') as stream:
+              runtimes = json.load(stream)['devices']
+          candidates = [device for runtime in sorted(runtimes, reverse=True) if 'iOS' in runtime for device in runtimes[runtime] if device['isAvailable'] and device['name'].startswith('iPhone')]
+          if not candidates:
+              raise SystemExit('No iPhone simulator is installed on this runner.')
+          with open(os.environ['GITHUB_ENV'], 'a') as stream:
+              stream.write('POCKET_SIMULATOR_ID=' + candidates[0]['udid'] + '\n')
+          print('Selected:', candidates[0]['name'], candidates[0]['udid'])
+          PY
+      - name: Test real Orca slicing in the native WKWebView
+        run: |
+          xcodebuild test -project ios/PocketSlicer.xcodeproj -scheme PocketSlicer -destination "id=$POCKET_SIMULATOR_ID" -derivedDataPath ios/build/simulator -resultBundlePath ios/build/native-engine.xcresult -parallel-testing-enabled NO CODE_SIGNING_ALLOWED=NO
+      - name: Build an unsigned device app for local sideloading
+        run: |
+          node scripts/prepare-ios.mjs
+          xcodebuild build -project ios/PocketSlicer.xcodeproj -scheme PocketSlicer -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath ios/build/device CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
+          mkdir -p ios/build/package/Payload
+          cp -R ios/build/device/Build/Products/Release-iphoneos/PocketSlicer.app ios/build/package/Payload/
+          cd ios/build/package
+          ditto -c -k --keepParent Payload PocketSlicer-unsigned.ipa
+      - name: Save native test evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: native-engine-test-results
+          path: ios/build/native-engine.xcresult
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Save sideloadable package
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: PocketSlicer-unsigned
+          path: ios/build/package/PocketSlicer-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 14
