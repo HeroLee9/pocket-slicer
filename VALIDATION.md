@@ -8,6 +8,8 @@ This app uses the actual pinned OrcaWasm engine in a worker. The native iOS simu
 
 The release build produced an unsigned `iphoneos` ARM64 IPA with iOS 17 minimum deployment target. Package inspection confirmed that the engine bytes match the pinned source assets and that test probe assets and signing material are absent. It does not depend on a public website. This is simulator/build validation; physical device memory limits, Files import/export and printer behavior are not established by these results.
 
+[Run 38477145239](https://github.com/HeroLee9/pocket-slicer/actions/runs/38477145239), source commit `424133fd4960b3298fc63e1abb6fde63bbf777c4`, passed all seven native tests: actual Orca slicing, exact WASM delivery and headers, HTTP path/Host/method restrictions, 21 export payload cases through the real WK reply bridge, wrong-origin rejection, preference persistence and rejection of secret/invalid preferences. Export bridge tests stop before presenting Files; they do not establish that a physical USB drive can receive a file.
+
 ## Browser and shared code
 
 - 29 unit tests passed for settings, profiles, G-code preview parsing, printable bounds and file delivery, including native bridge byte integrity, waiting for export confirmation, cancellation/error handling and the 64 MB payload limit.
