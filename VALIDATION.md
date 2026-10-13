@@ -1,8 +1,16 @@
 # Validation — October 13, 2026
 
-This app uses the actual pinned OrcaWasm engine in a browser worker; these results are from local production builds on Linux, not from an iPhone or a physical printer.
+This app uses the actual pinned OrcaWasm engine in a worker. The native iOS simulator and Linux browser checks below are separate from physical iPhone and printer testing, which remains pending.
 
-- 26 unit tests passed for settings, profiles, G-code preview parsing, printable bounds and file delivery.
+## Native iOS
+
+[GitHub Actions run 38476026700](https://github.com/HeroLee9/pocket-slicer/actions/runs/38476026700), source commit `7b66aa9511c4475a4696c172bdb364083d2414f7`, passed with Xcode 26.6 on the selected iPhone 17 Pro simulator. The actual `WKWebView` test confirmed a secure loopback context, cross-origin isolation, SharedArrayBuffer and shared WebAssembly memory using public APIs. Orca 2.4.2/API 0.7.0 sliced the cube into 100 layers, 252,604 bytes and 4,909 G0/G1 lines containing extrusion values. START_PRINT, END_PRINT, M83 and progress callbacks were verified.
+
+The release build produced an unsigned `iphoneos` ARM64 IPA with iOS 17 minimum deployment target. Package inspection confirmed that the engine bytes match the pinned source assets and that test probe assets and signing material are absent. It does not depend on a public website. This is simulator/build validation; physical device memory limits, Files import/export and printer behavior are not established by these results.
+
+## Browser and shared code
+
+- 29 unit tests passed for settings, profiles, G-code preview parsing, printable bounds and file delivery, including native bridge byte integrity, waiting for export confirmation, cancellation/error handling and the 64 MB payload limit.
 - Eight actual engine configurations passed: PLA, PETG, ABS, 0.6 mm and 0.8 mm nozzles, 100% infill, normal supports and tree supports. Generated motion, temperatures, extrusion and K1C start/end macros were checked.
 - The default 20 mm cube produced 252,604 bytes of G-code, 100 layers and 6,219 extrusion moves. Orca estimated 3.73 g and 17 minutes 29 seconds.
 - Chromium and WebKit passed model import, real slicing, layer preview and G-code download. Mobile and desktop layouts were inspected. Cancellation, invalid input, retry, empty numeric fields and invalidation of stale output were exercised.

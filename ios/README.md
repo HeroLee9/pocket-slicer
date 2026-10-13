@@ -4,7 +4,7 @@ This target bundles Pocket Slicer and the Orca WebAssembly engine inside an iOS 
 
 ## Current status
 
-The iOS project and native engine test are prepared. Native compilation and the iOS simulator test must pass before an installable package is considered ready. Browser WebKit tests alone do not verify this native configuration. Physical iPhone import, memory usage and USB export also require device testing.
+The [first native Mac build](https://github.com/HeroLee9/pocket-slicer/actions/runs/38476026700) passed the iOS simulator test and built an unsigned ARM64 device IPA. Inside an ordinary `WKWebView`, the bundled Orca 2.4.2 engine sliced a 20 mm cube into 100 layers and 252,604 bytes of G-code. Shared WebAssembly memory and cross-origin isolation were verified using public APIs. Physical iPhone import, memory usage and USB export still require device testing; simulator performance is not a phone benchmark.
 
 ## Build and test
 
@@ -25,7 +25,7 @@ Open the generated project to run the `PocketSlicer` test scheme. For a release 
 
 ## Free installation
 
-An unsigned `.ipa` cannot be installed by tapping it in Files. It must be signed for the device. A possible free route is SideStore, using a free Apple Account and an initial USB setup on Linux through iloader. Apple signing expires after seven days and requires renewal; SideStore can renew on the phone after setup. It consumes one of the three free sideloaded-app slots itself.
+Follow [INSTALL.md](INSTALL.md) for the verified Linux setup steps. An unsigned `.ipa` cannot be installed by tapping it in Files. It must be signed for the device. The free route uses SideStore, a free Apple Account and an initial USB setup on Linux through iloader. Apple signing expires after seven days and requires renewal; SideStore can renew on the phone after setup. It consumes one of the three free sideloaded-app slots itself.
 
 The user enters Apple credentials in the sideloading tool, never in Pocket Slicer or a chat. Developer Mode and device trust are user-controlled setup steps. SideStore compatibility and refresh reliability must be checked against the actual iOS version; current upstream releases include alpha software and reported renewal issues. Do not treat free sideloading as a permanent, maintenance-free install.
 

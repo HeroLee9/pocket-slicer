@@ -9,6 +9,6 @@ if(globalThis.crossOriginIsolated){renderApp();}
 else{
   root.render(<main className="startup"><h1>Pocket Slicer</h1><p role="status">Preparing local slicing…</p><p className="hint">This first step takes a moment.</p></main>);
   ensureSlicingIsolation().then(status=>{if(status==='ready')renderApp();}).catch(error=>{
-    root.render(<main className="startup"><h1>Pocket Slicer</h1><p role="alert">{error instanceof Error?error.message:'Local slicing could not start. Open this app in Safari and try again.'}</p><button className="primary" onClick={()=>{resetSlicingIsolationAttempt();location.reload();}}>Try again</button></main>);
+    root.render(<main className="startup"><h1>Pocket Slicer</h1><p role="alert">{error instanceof Error?error.message:'Local slicing could not start. Tap Try again to restart Pocket Slicer.'}</p><button className="primary" onClick={()=>{resetSlicingIsolationAttempt();location.reload();}}>Try again</button></main>);
   });
 }

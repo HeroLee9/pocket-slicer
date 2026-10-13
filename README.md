@@ -1,18 +1,20 @@
 # Pocket Slicer
 
-A browser app that runs the real OrcaSlicer engine locally on your device. Built for a Creality K1C and iPhone, with G-code export to Files or a connected USB drive. No model is uploaded for slicing.
+A local iPhone slicer that runs the real OrcaSlicer engine on the device. Built for a Creality K1C, with G-code export to Files or a connected USB drive. No model is uploaded for slicing.
 
-The installed iPhone version under [`ios/`](ios/README.md) bundles all application and engine files so it does not depend on a hosted website. Its native build and simulator test are separate from the browser checks described below; see that folder for current status and free sideloading requirements.
+The installed iPhone version under [`ios/`](ios/README.md) bundles all application and engine files so it does not depend on a hosted website. Its native simulator test has passed actual Orca slicing, and a device package has been built. Physical iPhone testing is still required. The React interface also runs in a browser for development.
 
 ## Use on iPhone
 
-Open the app's HTTPS address in Safari. The first visit may reload once while the app prepares local slicing. Tap **Import model** or **Try a 20 mm cube**. Choose the nozzle, filament and print settings, then **Slice model**. Keep Safari open while slicing. Inspect the preview, tap **Save G-code**, and choose **Save to Files**. Select your USB drive under Locations. If the browser downloads instead, move the `.gcode` file to the drive in Files.
+Follow the [free installation guide](ios/INSTALL.md) to sign and install the unsigned IPA using SideStore. A Mac or Xcode is not required on the user's computer. Free signing needs renewal every seven days; the PC is needed for initial setup and sometimes recovery.
+
+Open **Pocket Slicer** from the Home Screen. Tap **Import model** or **Try a 20 mm cube**. Choose the nozzle, filament and print settings, then **Slice model**. Keep the app open while slicing. Inspect the preview, tap **Save G-code**, and select your USB drive in the native Files picker. The PC and internet can be off while slicing and exporting.
 
 The Files picker allows all files so iOS does not disable STL files whose type it does not recognize. The app checks for STL, OBJ or 3MF after selection; choosing another format displays an error.
 
-**Settings & help → Save app for offline** saves the complete application and engine. Once that reports success, test a reload and slice in airplane mode. Safari can evict website storage when space is low. Add the app to your Home Screen from Safari's Share menu.
+The installed app already includes its complete engine; no offline download or website shortcut is needed. Settings and the printer address are saved on the phone. The printer API key stays in the current session.
 
-Printer upload is optional. Enter a reachable Moonraker URL in Settings and test the connection. Upload sends the file without starting a print. Browser local-network permission, mixed-content rules, Moonraker authentication and CORS may affect direct uploads. The USB workflow is independent of the printer network.
+Printer upload is optional and has not been verified from the native iPhone app. Enter a reachable Moonraker URL in Settings and test the connection. Upload sends the file without starting a print. Local-network permission, transport rules, Moonraker authentication and CORS may affect direct uploads. The USB workflow is independent of the printer network.
 
 ## Supported scope
 
@@ -21,7 +23,7 @@ Printer upload is optional. Enter a reachable Moonraker URL in Settings and test
 - K1C 0.4, 0.6 and 0.8 mm profiles; PLA, PETG and ABS.
 - Layer height, infill, walls, automatic normal/tree supports, brim and temperatures.
 - Actual Orca estimates and extrusion toolpaths with a layer slider.
-- Native file sharing/download, offline engine storage and optional Moonraker upload.
+- Native Files export to a USB drive, bundled offline engine and optional Moonraker upload.
 
 3MF print settings, painted supports, colors, modifier volumes and multi-plate layouts are not imported. All meshes in an imported file are combined. The app limits imports to 50 MB and one million triangles; the preview shows at most 750,000 extrusion segments, while exported G-code remains complete. These limits do not guarantee a device can slice every accepted model. This version does not preserve unsaved models or G-code after a page reload.
 
@@ -52,16 +54,16 @@ Cross-Origin-Resource-Policy: same-origin
 
 `http://localhost` works for development. A plain HTTP LAN address on an iPhone does not provide the secure context required by the threaded engine. If a host strips the headers, the app's service worker adds them to its own static responses and reloads once before model import. Authentication pages and callbacks are excluded. `npm run build` generates an offline asset manifest with hashes. Source downloads are packaged by `scripts/package-source.py`.
 
-## Host without Sites
+## Optional browser build
 
-The app is a standalone static application and does not need Sites, a slicing server, or an always-on personal computer. Any HTTPS static host can serve the built files. For a GitHub Pages project named `pocket-slicer`, build with:
+The browser development build can also be served as a standalone static application. This is separate from native installation; the iPhone app does not use a public host. For a static project path named `pocket-slicer`, build with:
 
 ```sh
 python3 scripts/package-source.py
 BASE_PATH=/pocket-slicer/ npm run build
 ```
 
-Publish the contents of `dist/` (including `.nojekyll`) as the Pages publishing branch. Service workers, engine files, icons, source downloads and offline storage all use the configured base path. For a domain's root path, use plain `npm run build`. GitHub Pages uses the app's service-worker isolation fallback because it does not read `_headers`.
+Serve the contents of `dist/`. Service workers, engine files, icons, source downloads and offline storage all use the configured base path. For a domain's root path, use plain `npm run build`. In the browser, **Settings & help → Save app for offline** stores the engine; browser storage may later be evicted. This repository's native workflow does not deploy a website.
 
 ## Source and license
 

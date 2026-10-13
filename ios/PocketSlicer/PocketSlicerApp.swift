@@ -10,6 +10,23 @@ struct PocketSlicerApp: App {
             VStack(spacing: 0) {
                 if let url = session.baseURL {
                     PocketSlicerWebView(url: url, session: session)
+                        .id(url)
+                        .allowsHitTesting(session.recoveryMessage == nil)
+                        .accessibilityHidden(session.recoveryMessage != nil)
+                        .overlay {
+                            if let message = session.recoveryMessage {
+                                ZStack {
+                                    Color(.systemBackground).opacity(0.96)
+                                    VStack(spacing: 16) {
+                                        Text("Restart Pocket Slicer").font(.title2.bold())
+                                        Text(message).multilineTextAlignment(.center)
+                                        Button("Restart slicer") { session.restart() }
+                                            .buttonStyle(.borderedProminent)
+                                            .accessibilityIdentifier("native.restart")
+                                    }.padding(28)
+                                }.accessibilityIdentifier("native.recovery")
+                            }
+                        }
                 } else if let error = session.startupError {
                     VStack(spacing: 16) {
                         Text("Pocket Slicer").font(.title.bold())
@@ -39,6 +56,7 @@ struct PocketSlicerApp: App {
 final class SlicerSession: ObservableObject {
     @Published private(set) var baseURL: URL?
     @Published private(set) var startupError: String?
+    @Published private(set) var recoveryMessage: String?
     @Published private(set) var diagnostics = "native: starting"
     private var server: LocalAssetServer?
     private var recentDiagnostics: [String] = []
@@ -71,8 +89,11 @@ final class SlicerSession: ObservableObject {
         server = nil
         baseURL = nil
         startupError = nil
+        recoveryMessage = nil
         start()
     }
+
+    func requireRecovery(_ message: String) { recoveryMessage = message }
 
     func record(_ message: String) {
         recentDiagnostics.append(String(message.prefix(800)))

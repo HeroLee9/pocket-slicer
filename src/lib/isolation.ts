@@ -1,3 +1,5 @@
+import { isNativeFileExportAvailable } from './export';
+
 const appBase = new URL(import.meta.env.BASE_URL, location.href);
 const serviceWorkerUrl = new URL('sw.js', appBase);
 const attemptKey = () => `pocket-slicer-isolation-attempt:${appBase.pathname}`;
@@ -35,6 +37,9 @@ function waitForControllerChange(): Promise<void> {
 /** Run before mounting the interactive app, so its one setup reload cannot lose a model. */
 export async function ensureSlicingIsolation(): Promise<'ready' | 'reloading'> {
   if (window.crossOriginIsolated) return 'ready';
+  if (isNativeFileExportAvailable()) {
+    throw new Error('Local slicing could not start on this iPhone. Tap Try again. If it still cannot start, close and reopen Pocket Slicer.');
+  }
   if (!window.isSecureContext) {
     throw new Error('Open Pocket Slicer using its HTTPS link in Safari. Local slicing cannot start from an unsecured address.');
   }

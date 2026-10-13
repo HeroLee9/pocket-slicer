@@ -15,6 +15,7 @@ struct PocketSlicerWebView: UIViewRepresentable {
         configuration.userContentController.add(context.coordinator, name: "pocketDiagnostics")
         configuration.userContentController.addUserScript(WKUserScript(source: Self.diagnosticsScript,
             injectionTime: .atDocumentEnd, forMainFrameOnly: true))
+        context.coordinator.installPreferences(on: configuration.userContentController)
         let view = WKWebView(frame: .zero, configuration: configuration)
         context.coordinator.installNativeExporter(on: view)
         view.navigationDelegate = context.coordinator
@@ -36,6 +37,7 @@ struct PocketSlicerWebView: UIViewRepresentable {
         uiView.stopLoading()
         coordinator.cancelNativeExport()
         uiView.configuration.userContentController.removeScriptMessageHandler(forName: "pocketDiagnostics")
+        uiView.configuration.userContentController.removeScriptMessageHandler(forName: NativePreferences.handlerName)
         uiView.configuration.userContentController.removeScriptMessageHandler(forName: NativeFileExporter.handlerName, contentWorld: .page)
         uiView.navigationDelegate = nil
         uiView.uiDelegate = nil
@@ -46,8 +48,17 @@ struct PocketSlicerWebView: UIViewRepresentable {
         private let session: SlicerSession
         private let origin: URL
         private var exporter: NativeFileExporter?
+        private var preferences: NativePreferences?
 
         init(session: SlicerSession, origin: URL) { self.session = session; self.origin = origin }
+
+        func installPreferences(on controller: WKUserContentController) {
+            let preferences = NativePreferences(allowedOrigin: origin)
+            self.preferences = preferences
+            controller.add(preferences, name: NativePreferences.handlerName)
+            controller.addUserScript(WKUserScript(source: preferences.injectionScript,
+                injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        }
 
         func installNativeExporter(on webView: WKWebView) {
             let exporter = NativeFileExporter(allowedOrigin: origin) { [weak webView] in
@@ -78,14 +89,23 @@ struct PocketSlicerWebView: UIViewRepresentable {
 
         func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
             session.record("navigation: \(error.localizedDescription)")
+            handleNavigationFailure(error)
         }
 
         func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
             session.record("navigation: \(error.localizedDescription)")
+            handleNavigationFailure(error)
         }
 
         func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
-            session.record("native: web process terminated; reopen the app to retry")
+            cancelNativeExport()
+            session.record("native: web process terminated")
+            session.requireRecovery("The local slicer stopped. Restart it, then open your model again. Saved print settings will be restored.")
+        }
+
+        private func handleNavigationFailure(_ error: Error) {
+            if (error as NSError).domain == NSURLErrorDomain && (error as NSError).code == NSURLErrorCancelled { return }
+            session.requireRecovery("The bundled slicer could not load. Restart the slicer to try again.")
         }
 
         func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createGcodeFile, exportGcode } from './export';
+import { createGcodeFile, exportGcode, MAX_NATIVE_GCODE_BYTES } from './export';
 import { getMoonrakerInfo, normalizeMoonrakerUrl, uploadGcode } from './moonraker';
 
 afterEach(() => vi.unstubAllGlobals());
@@ -18,6 +18,53 @@ describe('local G-code export', () => {
     const result = await exportGcode('G1 X1\n', 'part');
     expect(result.method).toBe('cancelled');
     expect(share).toHaveBeenCalledOnce();
+  });
+});
+
+describe('installed iPhone Files export', () => {
+  function installBridge(postMessage: ReturnType<typeof vi.fn>) {
+    vi.stubGlobal('window', { webkit: { messageHandlers: { nativeSaveGcode: { postMessage } } } });
+    const share = vi.fn();
+    vi.stubGlobal('navigator', { canShare: () => true, share });
+    return share;
+  }
+
+  it('preserves a multi-chunk Unicode file and waits for Files to confirm its save', async () => {
+    let confirmSave!: (value: { status: string }) => void;
+    const reply = new Promise(resolve => { confirmSave = resolve; });
+    const bridge = vi.fn().mockReturnValue(reply);
+    const share = installBridge(bridge);
+    const source = '; 模型 🐋\n' + 'G1 X12.5 Y20 E0.23\n'.repeat(6000);
+    const operation = exportGcode(source, '模型🧩'.repeat(100) + '.stl');
+    let finished = false;
+    void operation.then(() => { finished = true; });
+    await vi.waitFor(() => expect(bridge).toHaveBeenCalledOnce());
+    const payload = bridge.mock.calls[0][0];
+    expect(payload.version).toBe(1);
+    expect(new TextDecoder().decode(Uint8Array.from(atob(payload.base64), character => character.charCodeAt(0)))).toBe(source);
+    expect(payload.byteLength).toBe(new TextEncoder().encode(source).length);
+    expect(new TextEncoder().encode(payload.filename).length).toBeLessThanOrEqual(200);
+    expect(payload.filename).toMatch(/\.gcode$/);
+    expect(finished).toBe(false);
+    confirmSave({ status: 'saved' });
+    await expect(operation).resolves.toEqual({ method: 'native', filename: payload.filename });
+    expect(share).not.toHaveBeenCalled();
+  });
+
+  it('never falls back to browser sharing after native cancellation or failure', async () => {
+    const bridge = vi.fn().mockResolvedValueOnce({ status: 'cancelled' }).mockRejectedValueOnce(new Error('Drive disconnected'));
+    const share = installBridge(bridge);
+    await expect(exportGcode('G1 X1\n', 'part')).resolves.toEqual({ method: 'cancelled', filename: 'part.gcode' });
+    await expect(exportGcode('G1 X1\n', 'part')).rejects.toThrow('Drive disconnected');
+    expect(share).not.toHaveBeenCalled();
+  });
+
+  it('rejects oversized output before allocating a bridge payload', async () => {
+    const bridge = vi.fn();
+    installBridge(bridge);
+    const output = new Blob([new Uint8Array(MAX_NATIVE_GCODE_BYTES + 1)]);
+    await expect(exportGcode(output, 'large')).rejects.toThrow('64 MB');
+    expect(bridge).not.toHaveBeenCalled();
   });
 });
 
