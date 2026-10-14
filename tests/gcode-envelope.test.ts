@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { runInNewContext } from 'node:vm';
 import { describe, expect, test } from 'vitest';
 const source=readFileSync(new URL('../public/engine/gcode-validation.js',import.meta.url),'utf8');
-const validate=runInNewContext(source+'\nvalidateGcodeEnvelope;') as (gcode:string,limits?:{x:number;y:number;z:number})=>{moveCount:number;depositionMoves:number};
+const validate=runInNewContext(source+'\nvalidateGcodeEnvelope;',{TextDecoder}) as (gcode:string|Uint8Array,limits?:{x:number;y:number;z:number})=>{moveCount:number;depositionMoves:number;layerCount:number};
 const start='START_PRINT EXTRUDER_TEMP=220 BED_TEMP=55\nG90\nM83\nG1 X100 Y100 Z.2\n';
 const print='G1 X110 Y100 E.3\n';
 
@@ -40,5 +40,25 @@ describe('post-slice build volume verification',()=>{
  test('rejects extrusion-free files and unknown initial relative position',()=>{
   expect(()=>validate(start+'G1 E.8')).toThrow(/no deposition/);
   expect(()=>validate('G91\nM83\nG1 X5 E.1')).toThrow(/first absolute position/);
+ });
+ test('byte validation matches string validation including numbered movement and layer counts',()=>{
+  const text='; total layer number: 25\r\n; 名称\r\n'+start+'; CHANGE_LAYER\nN21 G1 X110 Y100 E.3*42\n';
+  expect(validate(new TextEncoder().encode(text))).toEqual(validate(text));
+  expect(validate(new TextEncoder().encode(text)).layerCount).toBe(25);
+  expect(validate(new TextEncoder().encode(start+'; LAYER_CHANGE\n'+print+'; CHANGE_LAYER\n')).layerCount).toBe(2);
+  expect(()=>validate(new TextEncoder().encode(start+print+'G91\nG1 X111 E.1'))).toThrow(/X=221/);
+ });
+ test('large byte files never decode the full G-code or a large comment at once',()=>{
+  let largest=0;
+  class BoundedDecoder extends TextDecoder {
+    override decode(input?:AllowSharedBufferSource,options?:TextDecodeOptions){
+      largest=Math.max(largest,input?.byteLength??0);return super.decode(input,options);
+    }
+  }
+  const bounded=runInNewContext(source+'\nvalidateGcodeEnvelope;',{TextDecoder:BoundedDecoder}) as typeof validate;
+  const text=';'+'.'.repeat(2_000_000)+'\n'+start+print.repeat(10_000)+'; CHANGE_LAYER\n';
+  expect(bounded(new TextEncoder().encode(text)).depositionMoves).toBe(1);
+  expect(largest).toBeLessThanOrEqual(65536);
+  expect(()=>bounded(new TextEncoder().encode(start+'G1 X110 '+' '.repeat(65536)+'X999 E.1'))).toThrow(/oversized command/);
  });
 });

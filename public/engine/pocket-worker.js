@@ -1,6 +1,7 @@
 /* Pocket Slicer adapter. Engine artifacts remain unmodified upstream releases. */
 'use strict';
 importScripts(new URL('gcode-validation.js', self.location.href).href);
+importScripts(new URL('result-storage.js', self.location.href).href);
 const API_VERSION = '0.7.0';
 const RELEASE = 'wasm-v2.4.2-patch29-multithreaded';
 const engineUrl = new URL('slicer-mt.js', self.location.href).href;
@@ -11,6 +12,27 @@ const wasmLength = 29019444;
 let enginePromise = null;
 let active = null;
 const loadingListeners = new Set();
+// The upstream runtime does not expose its pthread teardown. Track only the
+// child workers created in this adapter's realm, leaving its binary and pool
+// sizing unchanged. A completed operation retires the entire runtime.
+const childWorkers = new Set();
+const NativeWorker = self.Worker;
+self.Worker = class extends NativeWorker {
+  constructor(...args) {
+    super(...args);
+    childWorkers.add(this);
+  }
+  terminate() {
+    childWorkers.delete(this);
+    super.terminate();
+  }
+};
+
+function releaseRuntime() {
+  for (const worker of childWorkers) worker.terminate();
+  childWorkers.clear();
+  enginePromise = null;
+}
 
 function progress(id, stage, percent = null) {
   self.postMessage({ type: 'progress', id, progress: { stage, percent } });
@@ -139,7 +161,7 @@ async function slice(id, input) {
     const engine = await loadEngine(id);
     if (operation.controller.signal.aborted) throw Object.assign(new Error('Slicing cancelled.'), { code: 'CANCELLED' });
     progress(id, 'Preparing model', 0);
-    const bytes = new Uint8Array(input.stl);
+    let bytes = new Uint8Array(input.stl);
     const manifest = makeManifest(bytes, input);
     session = await engine.createSession();
     const configBytes = new TextEncoder().encode(JSON.stringify(input.config));
@@ -149,6 +171,10 @@ async function slice(id, input) {
     // user settings fail visibly and deliberately cleared G-code stays empty.
     await session.applyProfile('orca.native-json', configBytes);
     await session.setObjects(bytes, manifest);
+    // setObjects has copied the mesh into the native project. The transferred
+    // STL is no longer needed while slicing allocates native geometry.
+    bytes = null;
+    input.stl = null;
     const result = await session.slice({
       schemaVersion: API_VERSION,
       plateSelection: 'selected',
@@ -164,13 +190,8 @@ async function slice(id, input) {
     if (!asset) throw new Error('OrcaSlicer did not produce G-code.');
     const gcode = await session.getAsset(asset.id);
     if (gcode.byteLength !== asset.byteLength || !gcode.byteLength) throw new Error('OrcaSlicer returned incomplete G-code.');
-    const text = new TextDecoder().decode(gcode);
-    if (!/^G[01]\s.*\bE[-\d.]+/m.test(text)) throw new Error('The sliced file contains no extrusion moves. Check the model dimensions.');
     progress(id, 'Checking print boundaries', 99);
-    validateGcodeEnvelope(text, { x: Number(input.config.bed_size_x ?? 220), y: Number(input.config.bed_size_y ?? 220), z: Number(input.config.printable_height ?? 250) });
-    const headerLayerCount = text.match(/^;\s*total layer number:\s*(\d+)/m);
-    const layerCount = headerLayerCount ? Number(headerLayerCount[1]) : (text.match(/^;\s*(?:CHANGE_LAYER|LAYER_CHANGE)\s*$/gm) ?? []).length;
-    progress(id, 'G-code ready', 100);
+    const { layerCount } = validateGcodeEnvelope(gcode, { x: Number(input.config.bed_size_x ?? 220), y: Number(input.config.bed_size_y ?? 220), z: Number(input.config.printable_height ?? 250) });
     return {
       gcode,
       name: (String(input.name || 'model').replace(/\.[^.]+$/, '').replace(/[^\p{L}\p{N}_. -]/gu, '_') || 'model') + '.gcode',
@@ -190,15 +211,32 @@ self.onmessage = async ({ data }) => {
     return;
   }
   const { id } = data;
+  if (active) {
+    self.postMessage({ type: 'error', id, error: { code: 'BUSY', message: 'A model is already being sliced.' } });
+    return;
+  }
+  let retire = data.type === 'slice';
   try {
     let result;
     if (data.type === 'initialize') {
       const engine = await loadEngine(id);
       result = { name: 'OrcaSlicer', version: '2.4.2', release: RELEASE, apiVersion: API_VERSION, capabilities: engine.capabilities };
-    } else if (data.type === 'slice') result = await slice(id, data.payload);
+    } else if (data.type === 'slice') {
+      result = await slice(id, data.payload);
+      releaseRuntime();
+      progress(id, 'Keeping completed G-code on this device', 99);
+      result.recovery = await PocketSliceStorage.save(result, new URL('../', self.location.href));
+      progress(id, 'G-code ready', 100);
+    }
     else throw new Error('Unknown slicer request.');
-    self.postMessage({ type: 'result', id, result }, result.gcode ? [result.gcode.buffer] : []);
+    self.postMessage({ type: 'result', id, result, retired: retire }, result.gcode ? [result.gcode.buffer] : []);
   } catch (error) {
-    self.postMessage({ type: 'error', id, error: { code: error.code ?? 'ENGINE', message: error.message ?? String(error) } });
+    retire = true;
+    self.postMessage({ type: 'error', id, retired: true, error: { code: error.code ?? 'ENGINE', message: error.message ?? String(error) } });
+  } finally {
+    if (retire) {
+      releaseRuntime();
+      self.close();
+    }
   }
 };

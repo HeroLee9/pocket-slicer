@@ -6,7 +6,7 @@ The installed iPhone version under [`ios/`](ios/README.md) bundles all applicati
 
 ## Use on iPhone
 
-Open the Pocket Slicer Site in Safari. Import models, edit the plate and settings, slice, then use **Save G-code → Save to Files** to choose your USB drive. The computer is not required. **Settings & help → Save app for offline** caches the app and engine; refresh this copy after an update. Safari can evict website storage.
+Open the Pocket Slicer Site in Safari. Import models, edit the plate and settings, slice, then use **Save G-code → Save to Files** to choose your USB drive. The computer is not required. Saving is available immediately after slicing; **Build layer preview** is optional. If the page reloads after completion, the last completed G-code opens for saving again. **Settings & help → Save app for offline** caches the app and engine; refresh this copy after an update. Safari can evict website storage.
 
 For the separate native preview release:
 
@@ -27,10 +27,10 @@ Printer upload is optional and has not been verified from the native iPhone app.
 - K1C 0.4, 0.6 and 0.8 mm profiles; PLA, PETG, Elegoo Rapid PETG and ABS.
 - Quick settings and a searchable editor generated from the pinned Orca 2.4.2 option definitions, with typed validation, inherited defaults, per-option reset, local persistence, and JSON override import/export. Unsupported desktop/project/hardware features are explicitly marked unavailable.
 - Defaults: gyroid, three walls with inner/outer/inner order, 5,000 mm/s² print/travel acceleration with lower first-layer/role values retained, and the installed Creality Helper Script KAMP adaptive mesh/purge macros.
-- Actual Orca estimates and extrusion toolpaths with a layer slider.
+- Actual Orca estimates, optional extrusion toolpaths with a layer slider, and a local recovery copy of the last completed G-code.
 - Native Files export to a USB drive, bundled offline engine and optional Moonraker upload.
 
-3MF print settings, painted supports, colors, modifier volumes and multi-plate layouts are not imported. All meshes in each imported file are combined. Separate imported models can be positioned independently, then are merged into one same-material engine object for slicing. Per-object settings and sequential printing are unavailable. The app limits each import to 50 MB and the complete plate to one million triangles; the preview shows at most 750,000 extrusion segments, while exported G-code remains complete. These limits do not guarantee a device can slice every accepted model. This version does not preserve unsaved models or G-code after a page reload.
+3MF print settings, painted supports, colors, modifier volumes and multi-plate layouts are not imported. All meshes in each imported file are combined. Separate imported models can be positioned independently, then are merged into one same-material engine object for slicing. Per-object settings and sequential printing are unavailable. The app limits each import to 50 MB and the complete plate to one million triangles; the optional preview samples at most 200,000 extrusion segments across the complete print, while exported G-code remains complete. These limits do not guarantee a device can slice every accepted model. Completed, validated G-code is committed to IndexedDB before the slicing result is shown, and recovered after a page reload. The previous completed file is kept until a new result commits. Storage failures do not block immediate export; Safari can evict website data. Models and their placement are not restored. Orca workers are released after each slice; preview generation starts only when requested.
 
 Auto orientation compares sampled contact, overhang, support height and model height; it is a heuristic and does not guarantee the best surface finish or strength.
 
@@ -51,6 +51,8 @@ npm test
 npm run test:engine
 node scripts/test-orca-settings.mjs
 npm run build
+node tests/result-storage.browser.mjs
+node tests/slice-recovery.browser.mjs
 npm run preview
 ```
 

@@ -3,6 +3,10 @@
 'use strict';
 function validateGcodeEnvelope(gcode, limits = { x: 220, y: 220, z: 250 }) {
   const EPS = 1e-6, TAU = Math.PI * 2;
+  const isBytes = ArrayBuffer.isView(gcode) && gcode.BYTES_PER_ELEMENT === 1;
+  if (typeof gcode !== 'string' && !isBytes) throw new Error('The sliced G-code is unreadable.');
+  const decoder = isBytes ? new TextDecoder() : null;
+  const MAX_LINE_BYTES = 65536;
   const size = [limits.x, limits.y, limits.z];
   if (!size.every(value => Number.isFinite(value) && value > 0)) throw new Error('Invalid printer build volume.');
   let position = [null, null, null], origin = [0, 0, 0];
@@ -27,20 +31,33 @@ function validateGcodeEnvelope(gcode, limits = { x: 220, y: 220, z: 250 }) {
   const normalized = angle => ((angle % TAU) + TAU) % TAU;
   const sweepBetween = (start, end, clockwise) => normalized(clockwise ? start - end : end - start);
   // Iterate without retaining another full array of lines for large iPhone jobs.
-  let offset = 0, lineNumber = 0;
+  let offset = 0, lineNumber = 0, headerLayerCount = null, markerLayerCount = 0;
   while (offset < gcode.length) {
-    const end = gcode.indexOf('\n', offset);
-    const raw = gcode.slice(offset, end < 0 ? gcode.length : end);
+    const end = gcode.indexOf(isBytes ? 10 : '\n', offset);
+    const lineEnd = end < 0 ? gcode.length : end;
+    const truncated = lineEnd - offset > MAX_LINE_BYTES;
+    // Decoding per line avoids retaining a second complete G-code string while
+    // Orca's WASM heap is still live. Long comments/macros need only a prefix;
+    // actual motion lines must be readable in full to validate their endpoint.
+    const prefixEnd = Math.min(lineEnd, offset + MAX_LINE_BYTES);
+    const raw = isBytes ? decoder.decode(gcode.subarray(offset, prefixEnd)) : gcode.slice(offset, prefixEnd);
     offset = end < 0 ? gcode.length : end + 1;
     lineNumber++;
+    const header = raw.match(/^\s*;\s*total layer number:\s*(\d+)/i);
+    if (header && Number.isSafeInteger(Number(header[1]))) headerLayerCount = Number(header[1]);
+    if (/^\s*;\s*(?:CHANGE_LAYER|LAYER_CHANGE)\s*$/i.test(raw)) markerLayerCount++;
     let line = raw.split(';')[0].replace(/\([^)]*\)/g, '').trim().toUpperCase();
-    if (!line) continue;
+    if (!line) {
+      if (truncated && !raw.includes(';')) fail(lineNumber, 'The toolpath contains an unreadable oversized line');
+      continue;
+    }
     line = line.replace(/^N\d+\s*/, '').replace(/\*\d+\s*$/, '').trim();
     const opcode = line.match(/^([GMT]\d+(?:\.\d+)?)(?=\s|[A-Z]|$)/);
     let command, payload;
     if (opcode) { command = opcode[1]; payload = line.slice(command.length); }
     else if (/^[XYZEFIJR][-+.\d]/.test(line) && motion) { command = motion; payload = line; }
     else continue; // Named Klipper macros / SET_VELOCITY_LIMIT have no explicit path.
+    if (truncated) fail(lineNumber, 'The toolpath contains an unreadable oversized command');
     const fields = {};
     for (const match of payload.matchAll(/([A-Z])([-+]?(?:\d*\.)?\d+)/g)) fields[match[1]] = Number(match[2]);
     if (command === 'G20') { units = 25.4; continue; }
@@ -134,5 +151,5 @@ function validateGcodeEnvelope(gcode, limits = { x: 220, y: 220, z: 250 }) {
     if (hasSpatialMove) moveCount++;
   }
   if (!depositionMoves) fail(lineNumber, 'The sliced file contains no deposition moves');
-  return { envelope, moveCount, depositionMoves };
+  return { envelope, moveCount, depositionMoves, layerCount: headerLayerCount ?? markerLayerCount };
 }

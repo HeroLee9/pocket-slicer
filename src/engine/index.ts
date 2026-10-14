@@ -1,4 +1,6 @@
 /** Browser bridge to the pinned, local OrcaSlicer WebAssembly engine. */
+import type { SliceRecovery } from '../lib/slice-storage';
+
 export interface EngineProgress {
   stage: string;
   percent: number | null;
@@ -34,14 +36,18 @@ export interface SliceResult {
   statistics: SliceStatistics | null;
   elapsedMs: number;
   layerCount: number;
+  recovery?: SliceRecovery;
 }
 
 interface RequestOptions {
   onProgress?: (progress: EngineProgress) => void;
   signal?: AbortSignal;
+  /** Transfer a temporary STL buffer directly. The caller's buffer becomes detached. */
+  transferInput?: boolean;
 }
 
 interface Pending {
+  type: string;
   resolve: (value: any) => void;
   reject: (error: Error) => void;
   onProgress?: RequestOptions['onProgress'];
@@ -73,8 +79,10 @@ export class OrcaSlicerClient {
   }
 
   slice(input: SliceInput, options: RequestOptions = {}): Promise<SliceResult> {
-    // Transfer a copy, leaving the UI's model available for previews and another slice.
-    const stl = input.stl.slice(0);
+    if (options.signal?.aborted) return Promise.reject(new SlicerError('Slicing cancelled.', 'CANCELLED'));
+    // A freshly generated plate STL can transfer directly without another mesh
+    // allocation. Preserve caller-owned meshes unless explicitly opted in.
+    const stl = options.transferInput ? input.stl : input.stl.slice(0);
     return this.request<SliceResult>('slice', { ...input, stl }, options, [stl]);
   }
 
@@ -84,8 +92,7 @@ export class OrcaSlicerClient {
 
   dispose(): void {
     this.disposed = true;
-    this.worker?.terminate();
-    this.worker = null;
+    if (this.worker) this.releaseWorker(this.worker);
     this.failAll(new SlicerError('Slicer was closed.', 'CANCELLED'));
   }
 
@@ -108,19 +115,21 @@ export class OrcaSlicerClient {
       }
       this.pending.delete(data.id);
       pending.cleanup();
+      // The result buffer has already transferred into this realm. Drop the
+      // complete WASM runtime before the caller stores/renders that result.
+      // Session.dispose() alone keeps the grown shared heap and pthread pool.
+      if (pending.type === 'slice' || data.retired) this.releaseWorker(worker);
       if (data.type === 'result') pending.resolve(data.result);
       else pending.reject(new SlicerError(data.error?.message ?? 'Slicing failed.', data.error?.code));
     };
     worker.onerror = (event) => {
       event.preventDefault();
       this.failAll(new SlicerError(event.message || 'The slicing worker stopped. Try a smaller model or reload the app.', 'WORKER_FAILED'));
-      worker.terminate();
-      this.worker = null;
+      this.releaseWorker(worker);
     };
     worker.onmessageerror = () => {
       this.failAll(new SlicerError('The slicing worker returned unreadable data.', 'WORKER_FAILED'));
-      worker.terminate();
-      this.worker = null;
+      this.releaseWorker(worker);
     };
     this.worker = worker;
     return worker;
@@ -128,6 +137,7 @@ export class OrcaSlicerClient {
 
   private request<T>(type: string, payload: unknown, options: RequestOptions = {}, transfer: Transferable[] = []): Promise<T> {
     if (options.signal?.aborted) return Promise.reject(new SlicerError('Slicing cancelled.', 'CANCELLED'));
+    if (this.pending.size) return Promise.reject(new SlicerError('The slicer is already working. Wait for it to finish or cancel.', 'BUSY'));
     return new Promise((resolve, reject) => {
       let worker: Worker;
       try { worker = this.getWorker(); } catch (error) { reject(error); return; }
@@ -135,9 +145,23 @@ export class OrcaSlicerClient {
       const abort = () => worker.postMessage({ type: 'cancel', id });
       const cleanup = () => options.signal?.removeEventListener('abort', abort);
       options.signal?.addEventListener('abort', abort, { once: true });
-      this.pending.set(id, { resolve, reject, onProgress: options.onProgress, cleanup });
-      worker.postMessage({ type, id, payload }, transfer);
+      this.pending.set(id, { type, resolve, reject, onProgress: options.onProgress, cleanup });
+      try { worker.postMessage({ type, id, payload }, transfer); }
+      catch (error) {
+        this.pending.delete(id);
+        cleanup();
+        this.releaseWorker(worker);
+        reject(error);
+      }
     });
+  }
+
+  private releaseWorker(worker: Worker): void {
+    worker.onmessage = null;
+    worker.onerror = null;
+    worker.onmessageerror = null;
+    worker.terminate();
+    if (this.worker === worker) this.worker = null;
   }
 
   private failAll(error: Error): void {
