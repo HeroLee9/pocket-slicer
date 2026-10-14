@@ -6,12 +6,14 @@ This app uses the actual pinned OrcaWasm engine in a worker. The native iOS simu
 
 The current Sites source adds multiple model instances, plate manipulation, expert settings and Elegoo Rapid PETG. The previously released native IPA has not been rebuilt for this update.
 
-- 55 shared tests passed, including mirrored winding, immutable source meshes, absolute plate coordinates, bed/brim bounds, arrangement, diagonal face orientation, typed parameter validation and reviewed profile imports.
+- 56 shared tests passed, including mirrored winding, immutable source meshes, absolute plate coordinates, bed/brim bounds, arrangement, diagonal face orientation without unnecessary cube yaw, typed parameter validation and reviewed profile imports.
 - All 474 editable options from the pinned Orca 2.4.2 catalog were accepted by the actual WASM strict profile parser. The other 203 catalog entries explain unsupported hardware, desktop or project capabilities. Three real-engine scenarios verified changed layer heights, walls, infill, cooling, retraction, speeds, acceleration, custom/empty G-code, ironing and fuzzy skin in output. Run `node scripts/test-orca-settings.mjs`.
 - Mobile WebKit at 393 × 852 and Chromium at 1440 × 1050 passed XYZ positioning, drop to bed, uniform/axis scaling, flips, mirrors, auto orientation, real canvas face selection and dragging, duplication, arrangement, deletion and undo/redo. Both exported the same 652,599-byte, 40-layer two-model plate with 9,619 extrusion moves. There were no page errors or external HTTP requests; Chromium emitted only software GPU performance notices.
 - Mobile WebKit passed a complete expert-settings flow: default migration, Elegoo selection, search, numeric/enum/G-code edits, invalid temperature and layer checks, reviewed import with excluded-key disclosure, override/full-profile downloads, local persistence and actual slicing. Export contained 417,443 bytes and 80 layers with the requested overrides. Removing row content-visibility prevented row-height changes from shifting the Slice button during mobile scrolling.
 - Elegoo Rapid PETG sliced on 0.4, 0.6 and 0.8 mm profiles with 250°C nozzle and 80°C bed. The profile has not been physically calibrated on the user's spool.
 - KAMP tests found object polygons before exactly one START_PRINT and both adaptive selectors. A separated, transformed and mirrored two-part test retained exact XY bounds of 35–180 and 45–140 mm; extrusion remained on both separate islands. Requested defaults produced gyroid, inner/outer/inner, and no M204 command above 5000 mm/s².
+
+The packaged offline build cached all 22 assets, then reloaded, auto-oriented, sliced and exported after its server was physically stopped. This verifies offline delivery of the new orientation worker as well as the slicing engine.
 
 Browser plugin was not available; local Playwright used the installed WebKit/Chromium runtimes. Screenshots and JSON evidence remain outside the source repository in the task workspace. Physical iPhone/USB and printer-side KAMP behavior remain untested; no printer command or print job was sent.
 

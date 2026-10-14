@@ -214,7 +214,7 @@ export function autoOrient(model:Model,transform:ObjectTransform,options:AutoOri
   candidates.forEach((q,candidate)=>{
     const box=new THREE.Box3();let totalArea=0;
     for(const f of facets){box.expandByPoint(a.copy(f.a).applyQuaternion(q));box.expandByPoint(b.copy(f.b).applyQuaternion(q));box.expandByPoint(c.copy(f.c).applyQuaternion(q));totalArea+=f.area*f.weight;}
-    const size=box.getSize(new THREE.Vector3()),diagonal=Math.max(size.length(),0.001),tolerance=Math.max(0.02,size.z*0.00001);
+    const size=box.getSize(new THREE.Vector3()),characteristicLength=Math.max(Math.sqrt(totalArea),0.001),tolerance=Math.max(0.02,size.z*0.00001);
     let contactArea=0,overhangArea=0,supportVolume=0;
     for(const f of facets){
       a.copy(f.a).applyQuaternion(q);b.copy(f.b).applyQuaternion(q);c.copy(f.c).applyQuaternion(q);normal.copy(f.normal).applyQuaternion(q);
@@ -222,7 +222,9 @@ export function autoOrient(model:Model,transform:ObjectTransform,options:AutoOri
       if(onBed&&normal.z<-.5)contactArea+=area;
       if(!onBed&&normal.z<-Math.SQRT1_2){const support=area*(-normal.z-Math.SQRT1_2)/(1-Math.SQRT1_2);overhangArea+=support;supportVolume+=support*((a.z+b.z+c.z)/3-box.min.z);}
     }
-    const score=100*overhangArea/totalArea+50*supportVolume/(totalArea*diagonal)-20*contactArea/totalArea+2*size.z/diagonal+0.5*size.x*size.y/totalArea+(contactArea>0?0:20);
+    // Surface area is invariant under rotation. A bounding-box diagonal would
+    // reward unnecessary yaw because a diagonal footprint has a larger box.
+    const score=100*overhangArea/totalArea+50*supportVolume/(totalArea*characteristicLength)-20*contactArea/totalArea+2*size.z/characteristicLength+0.5*size.x*size.y/totalArea+(contactArea>0?0:20);
     scored.push({q,score,contactArea,overhangArea});options.onProgress?.(candidate+1,candidates.length);
   });
   scored.sort((a,b)=>a.score-b.score);

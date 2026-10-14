@@ -70,6 +70,12 @@ describe('model manipulation in bed coordinates',()=>{
 });
 
 describe('face-aware automatic orientation',()=>{
+  it('preserves a flat cube instead of rewarding a diagonal footprint',()=>{
+    const model=box(),result=autoOrient(model,t()),bounds=objectBounds(model,result.transform);
+    bounds.size.forEach(value=>expect(value).toBeCloseTo(20,5));
+    expect(result.transform.x).toBeCloseTo(0);expect(result.transform.y).toBeCloseTo(0);expect(result.transform.z).toBeCloseTo(0);
+    model.geometry.dispose();
+  });
   it('finds a diagonal planar base, not just the six axis-aligned sides',()=>{
     const model=box(10,40,3);model.geometry.rotateX(32*Math.PI/180);model.geometry.rotateY(17*Math.PI/180);
     const progress:number[]=[];const result=autoOrient(model,t(),{onProgress:(done)=>progress.push(done)});

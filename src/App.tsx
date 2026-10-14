@@ -35,9 +35,9 @@ export default function App(){
   useEffect(()=>()=>{engine.current?.dispose();previewWorker.current?.terminate();},[]);
   useEffect(()=>{const keep=new Set([...plate.present,...plate.past.flat(),...plate.future.flat()].map(o=>o.model));for(const model of ownedModels.current)if(!keep.has(model)){model.geometry.dispose();ownedModels.current.delete(model);}},[plate]);
   useEffect(()=>()=>{for(const model of ownedModels.current)model.geometry.dispose();orientationAbort.current?.abort();},[]);
-  useEffect(()=>{try{localStorage.setItem('pocket-settings-v1',JSON.stringify(settings));localStorage.setItem('pocket-defaults-v2','1');}catch{/* browser storage is optional */}},[settings]);
+  useEffect(()=>{try{resolveSettings(settings);localStorage.setItem('pocket-settings-v1',JSON.stringify(settings));localStorage.setItem('pocket-defaults-v2','1');}catch{/* browser storage is optional */}},[settings]);
   useEffect(()=>{try{localStorage.setItem('pocket-printer-v1',connection.url);}catch{/* browser storage is optional */}},[connection.url]);
-  useEffect(()=>{try{localStorage.setItem('pocket-orca-overrides-v1',JSON.stringify(overrides));}catch{/* optional storage */}},[overrides]);
+  useEffect(()=>{try{applyOverrides(buildConfig(settings),overrides);localStorage.setItem('pocket-orca-overrides-v1',JSON.stringify(overrides));}catch{/* optional storage */}},[overrides,settings]);
   const dimensions=useMemo(()=>{if(!selected)return null;try{return objectBounds(selected.model,selected.transform).size;}catch{return null;}},[selected]);
   const configState=useMemo(()=>{let base:Record<string,unknown>;try{base=buildConfig(settings);}catch(e){return {base:buildConfig(),effective:buildConfig(),error:e instanceof Error?e.message:String(e)};}try{return {base,effective:applyOverrides(base,overrides),error:''};}catch(e){return {base,effective:base,error:e instanceof Error?e.message:String(e)};}},[settings,overrides]);
   const config=configState.effective;
