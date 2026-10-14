@@ -2,25 +2,50 @@
   "project": "OrcaWasm",
   "repository": "https://github.com/Hiosdra/OrcaWasm",
   "commit": "60a09e04f1990be39c8f6f35dffef1a2c9e224c4",
-  "release": "wasm-v2.4.2-patch29-multithreaded",
-  "releaseUrl": "https://github.com/Hiosdra/OrcaWasm/releases/tag/wasm-v2.4.2-patch29-multithreaded",
+  "release": "engine-v2.4.2-mobile1",
+  "releaseUrl": "https://github.com/HeroLee9/pocket-slicer/tree/engine-v2.4.2-mobile1",
   "sourceUrl": "https://github.com/Hiosdra/OrcaWasm/tree/60a09e04f1990be39c8f6f35dffef1a2c9e224c4",
   "sourceArchive": "/source/orcawasm-source.zip",
-  "sourceArchiveSha256": "21046c2c502ce555b85cdc590a93882ece75432da6694fa7fd8bc43708486a51",
+  "sourceArchiveSha256": "a0817b35a2e4c0ae9e9b3b2b59691d1ff2ee33c4c2acb99450682eae28bf6faa",
   "orcaVersion": "2.4.2",
   "orcaCommit": "8500fcdccaa10b5099ac20d252af3a7c560046f1",
   "orcaSourceUrl": "https://github.com/OrcaSlicer/OrcaSlicer/tree/8500fcdccaa10b5099ac20d252af3a7c560046f1",
   "apiVersion": "0.7.0",
-  "retrieved": "2026-10-13",
-  "artifactsUnmodified": true,
+  "retrieved": "2026-10-14",
+  "artifactsUnmodified": false,
   "wasmStorage": {
-    "parts": ["slicer-mt.wasm.part0", "slicer-mt.wasm.part1"],
+    "parts": [
+      "slicer-mt.wasm.part0",
+      "slicer-mt.wasm.part1"
+    ],
     "splitAtBytes": 16777216,
-    "totalBytes": 29019444,
-    "note": "Concatenate in order to recreate the unmodified release binary. Split for static hosting per-file limits."
+    "totalBytes": 29003990,
+    "note": "Concatenate in order to recreate the checksum-verified custom mobile build. Split for static hosting per-file limits."
   },
   "sha256": {
-    "slicer-mt.js": "2ec6dced8758befae27f0e7adc7cb18273b14fb5db49f90c61876656ba2500fc",
-    "slicer-mt.wasm": "34614074e543bf51ca923606279673efaf8b628f80b513b96cb51c923ed574b0"
+    "slicer-mt.js": "e2b6b37409cad80445a57b50feda5d5a6a65876a4edd5228684feabc6a531128",
+    "slicer-mt.wasm": "e84e12a732122922028355ce2e50249005230248139672a609ddf5cc9971969b"
+  },
+  "upstreamRelease": "wasm-v2.4.2-patch29-multithreaded",
+  "upstreamReleaseUrl": "https://github.com/Hiosdra/OrcaWasm/releases/tag/wasm-v2.4.2-patch29-multithreaded",
+  "artifactBaseUrl": "https://raw.githubusercontent.com/HeroLee9/pocket-slicer/engine-v2.4.2-mobile1/public/engine/",
+  "build": {
+    "kind": "Pocket Slicer bounded native visualization build",
+    "date": "2026-10-14",
+    "patch": "scripts/engine/apply_headless.py",
+    "recipe": "scripts/engine/build.sh",
+    "compileDefinition": "ORCA_WASM_HEADLESS_GCODE=1",
+    "emscripten": "3.1.74",
+    "emsdkCommit": "8f685c26ee9f672081e61e22c6aa60fa972d00a9",
+    "cmake": "3.31.10",
+    "ninja": "1.13.0",
+    "ccache": "4.14.1",
+    "nativeWebAssemblyExceptions": true,
+    "threading": "Upstream multithreaded runtime and pool sizing retained",
+    "runtimeMemoryBudgetMiB": 768,
+    "patchedSources": {
+      "src/libslic3r/GCode/GCodeProcessor.cpp": "8f64fd286a0d934e5b257c81f2c2fb8de2eb5fb2b6ed220ba393d393205da696",
+      "src/libslic3r/GCode/GCodeProcessor.hpp": "b94f9c9ee49e6bfcd81f675e1bfcc196522212e9b3077cb7d061cb7752680b8c"
+    }
   }
 }

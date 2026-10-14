@@ -3,14 +3,15 @@ import * as THREE from 'three';
 import {OrbitControls} from 'three/examples/jsm/controls/OrbitControls.js';
 import {Box,Home,Minus,Plus} from 'lucide-react';
 import {placedGeometry,type ObjectTransform,type PlateObject} from '../lib/geometry';
-import type {GcodePreview} from '../lib/gcode';
+import type {SupportPreview} from '../lib/gcode';
+import {supportGeometry} from '../lib/support-geometry';
 import type {ViewMode} from './ModelTools';
 
-type Props={objects:PlateObject[];selectedId:string|null;onSelect:(id:string)=>void;onMove:(id:string,patch:Partial<ObjectTransform>)=>void;onFace:(id:string,index:number)=>void;mode:ViewMode;onMode:(mode:ViewMode)=>void;disabled:boolean;preview:GcodePreview|null;layer:number;showPreview:boolean;dimensions:number[]|null};
+type Props={objects:PlateObject[];selectedId:string|null;onSelect:(id:string)=>void;onMove:(id:string,patch:Partial<ObjectTransform>)=>void;onFace:(id:string,index:number)=>void;mode:ViewMode;onMode:(mode:ViewMode)=>void;disabled:boolean;preview:SupportPreview|null;showPreview:boolean;dimensions:number[]|null};
 type Context={renderer:THREE.WebGLRenderer;scene:THREE.Scene;camera:THREE.PerspectiveCamera;controls:OrbitControls;group:THREE.Group;render:()=>void;reset:()=>void};
 function clearGroup(group:THREE.Group){for(const object of [...group.children]){group.remove(object);if(object instanceof THREE.Mesh||object instanceof THREE.LineSegments){object.geometry.dispose();(Array.isArray(object.material)?object.material:[object.material]).forEach(m=>m.dispose());}}}
 export default function Viewer(props:Props){
-  const {objects,selectedId,mode,disabled,preview,layer,showPreview,dimensions}=props;
+  const {objects,selectedId,mode,disabled,preview,showPreview,dimensions}=props;
   const mount=useRef<HTMLDivElement>(null),context=useRef<Context|null>(null),latest=useRef(props);latest.current=props;
   const [failure,setFailure]=useState('');
   useEffect(()=>{
@@ -43,11 +44,12 @@ export default function Viewer(props:Props){
   },[]);
   useEffect(()=>{const c=context.current;if(c)c.controls.enabled=mode==='orbit'||showPreview;},[mode,showPreview]);
   useEffect(()=>{const c=context.current;if(!c)return;clearGroup(c.group);
-    if(showPreview&&preview){const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(preview.positions,3));g.setAttribute('color',new THREE.BufferAttribute(preview.colors,3));c.group.add(new THREE.LineSegments(g,new THREE.LineBasicMaterial({vertexColors:true})));}
-    else for(const object of objects){try{const mesh=new THREE.Mesh(placedGeometry(object.model,object.transform),new THREE.MeshStandardMaterial({color:object.id===selectedId?0x246bfd:0x8195b8,roughness:.6,metalness:.03,flatShading:true}));mesh.userData.id=object.id;c.group.add(mesh);}catch{/* Invalid numeric drafts are explained in the controls. */}}
+    const overview=showPreview&&!!preview;
+    for(const object of objects){try{const mesh=new THREE.Mesh(placedGeometry(object.model,object.transform),new THREE.MeshStandardMaterial({color:overview?0x8195b8:object.id===selectedId?0x246bfd:0x8195b8,roughness:.6,metalness:.03,flatShading:true,transparent:overview&&!!preview.segments,opacity:overview&&preview.segments ? .65 : 1,depthWrite:!(overview&&preview.segments)}));mesh.userData.id=object.id;mesh.renderOrder=overview?1:0;c.group.add(mesh);}catch{/* Invalid numeric drafts are explained in the controls. */}}
+    if(overview&&preview.segments){const mesh=new THREE.Mesh(supportGeometry(preview),new THREE.MeshStandardMaterial({color:0x3dbb78,roughness:.8}));c.group.add(mesh);}
+    if(overview&&c.group.children.length){const sphere=new THREE.Box3().setFromObject(c.group).getBoundingSphere(new THREE.Sphere());const distance=Math.max(30,sphere.radius/Math.sin(THREE.MathUtils.degToRad(c.camera.fov/2))*1.15/Math.min(1,c.camera.aspect));c.controls.target.copy(sphere.center);c.camera.position.copy(sphere.center).add(new THREE.Vector3(1,-1.5,1.1).normalize().multiplyScalar(distance));c.controls.update();}
     c.render();
   },[objects,selectedId,preview,showPreview]);
-  useEffect(()=>{const c=context.current;if(c&&showPreview&&preview){for(const object of c.group.children)if(object instanceof THREE.LineSegments)object.geometry.setDrawRange(0,preview.layers[Math.max(0,layer-1)]?.end||0);c.render();}},[layer,preview,showPreview]);
   const zoom=(factor:number)=>{const c=context.current;if(!c)return;c.camera.position.sub(c.controls.target).multiplyScalar(factor).add(c.controls.target);c.controls.update();c.render();};
   const top=()=>{const c=context.current;if(!c)return;c.camera.position.set(110,109.99,390);c.controls.target.set(110,110,0);c.controls.update();c.render();};
   return <div className="viewport"><div className="three-mount" ref={mount}/>{objects.length>0&&!showPreview&&<div className="view-mode-tools">{(['orbit','move','face'] as const).map(m=><button key={m} disabled={disabled} aria-pressed={mode===m} onClick={()=>props.onMode(m)}>{m==='face'?'Lay on face':m==='move'?'Move':'Orbit'}</button>)}</div>}<div className="view-tools"><button aria-label="Reset view" onClick={()=>context.current?.reset()}><Home size={20}/></button><button aria-label="Zoom in" onClick={()=>zoom(.8)}><Plus size={20}/></button><button aria-label="Zoom out" onClick={()=>zoom(1.25)}><Minus size={20}/></button><button aria-label="Top view" onClick={top}><Box size={20}/></button></div>{!objects.length&&!showPreview&&!failure&&<div className="viewport-empty"><Box size={35} strokeWidth={1.3}/><strong>Your next print starts here</strong><span>Import a model to place it on the bed.</span></div>}{failure&&<div className="viewport-empty">{failure}</div>}{objects.length>0&&mode!=='orbit'&&!showPreview&&<span className="view-instruction">{mode==='face'?'Tap a flat face to place it against the bed.':'Drag a model to move it across the bed.'}</span>}<span className="bed-label">K1C · 220 × 220 mm</span>{dimensions&&<span className="dimensions">{dimensions.map(v=>v.toFixed(1).replace('.0','')).join(' × ')} mm</span>}</div>;

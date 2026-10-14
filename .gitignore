@@ -10,3 +10,6 @@ ios/build/
 ios/*.xcodeproj/
 ios/*.xcworkspace/
 *.xcresult/
+
+__pycache__/
+*.py[cod]

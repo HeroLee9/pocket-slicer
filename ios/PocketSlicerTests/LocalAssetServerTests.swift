@@ -37,9 +37,9 @@ final class LocalAssetServerTests: XCTestCase {
             digest.update(data: data)
             total += data.count
         }
-        XCTAssertEqual(total, 29_019_444)
+        XCTAssertEqual(total, 29_003_990)
         XCTAssertEqual(digest.finalize().map { String(format: "%02x", $0) }.joined(),
-                       "34614074e543bf51ca923606279673efaf8b628f80b513b96cb51c923ed574b0")
+                       "e84e12a732122922028355ce2e50249005230248139672a609ddf5cc9971969b")
     }
 
     func testRequestsCannotEscapeTheBundleOrWriteFiles() async throws {

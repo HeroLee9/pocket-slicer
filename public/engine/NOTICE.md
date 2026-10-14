@@ -1,5 +1,18 @@
 # Third-party notices
 
+## Pocket Slicer mobile build
+
+This engine includes Pocket Slicer's bounded native G-code visualization patch.
+It removes retained desktop preview data while retaining the slicing pipeline,
+timing calculations, filament accounting, and native print-area checks.
+The complete local patch and reproducible build recipe are in `scripts/engine/`
+in the app source and in `PocketSlicer-custom-source/` inside
+[`orcawasm-source.zip`](../source/orcawasm-source.zip). That archive also contains
+the original OrcaWasm source. The exact full OrcaSlicer source revision and all
+build instructions are linked from [`ENGINE-SOURCE.txt`](../source/ENGINE-SOURCE.txt).
+Artifact and source hashes are recorded in [`PROVENANCE.json`](PROVENANCE.json).
+The original upstream notices follow.
+
 ## one-slicer-api glue
 
 `wasm/oneslicer/oneslicer-emscripten-glue.js` and

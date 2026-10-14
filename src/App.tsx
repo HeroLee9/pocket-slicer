@@ -11,7 +11,7 @@ import {DEFAULT_OBJECT_TRANSFORM,objectBounds,plateSTL,validatePlate,arrangePlat
 import {autoOrientAsync} from './lib/auto-orient';
 import {DEFAULT_SETTINGS,buildConfig,getProfileSummary,resolveSettings,type PrintSettings as PrintSettingsType} from './profiles';
 import {OrcaSlicerClient,type EngineProgress,type SliceResult} from './engine';
-import type {GcodePreview} from './lib/gcode';
+import type {SupportPreview} from './lib/gcode';
 import {createGcodeFile,downloadGcode,exportGcode,isNativeFileExportAvailable} from './lib/export';
 import {uploadGcode} from './lib/moonraker';
 import {loadSavedSlice,deleteSavedSlice} from './lib/slice-storage';
@@ -21,6 +21,7 @@ function storedOverrides():OrcaOverrides {try{const value=JSON.parse(localStorag
 const firstNumber=(value:unknown)=>Number(Array.isArray(value)?value[0]:value);
 type ReadySlice=Omit<SliceResult,'gcode'> & {gcode:Blob;savedAt?:number;storageId?:string;recovered?:boolean};
 type PlateHistory={present:PlateObject[];past:PlateObject[][];future:PlateObject[][]};
+const EMPTY_PLATE:PlateObject[]=[];
 function storedAddress(){try{return localStorage.getItem('pocket-printer-v1')||'';}catch{return '';}}
 function formatTime(seconds:number){const min=Math.max(1,Math.round(seconds/60));return min>=60?`${Math.floor(min/60)}h ${min%60}m`:`${min} min`;}
 
@@ -29,7 +30,7 @@ export default function App(){
   const objects=plate.present,selected=objects.find(o=>o.id===selectedId)??objects[0],model=selected?.model??null;
   const [overrides,setOverrides]=useState<OrcaOverrides>(storedOverrides),[printMode,setPrintMode]=useState<'quick'|'all'>('quick'),[viewMode,setViewMode]=useState<ViewMode>('orbit'),[orienting,setOrienting]=useState(false);
   const ownedModels=useRef(new Set<Model>()),loadMode=useRef<'add'|'replace'>('add'),orientationAbort=useRef<AbortController|null>(null);
-  const [tab,setTab]=useState<'model'|'print'|'preview'>('model'),[result,setResult]=useState<ReadySlice|null>(null),[savedResult,setSavedResult]=useState<ReadySlice|null>(null),[preview,setPreview]=useState<GcodePreview|null>(null),[layer,setLayer]=useState(1);
+  const [tab,setTab]=useState<'model'|'print'|'preview'>('model'),[result,setResult]=useState<ReadySlice|null>(null),[savedResult,setSavedResult]=useState<ReadySlice|null>(null),[preview,setPreview]=useState<SupportPreview|null>(null);
   const [loading,setLoading]=useState(false),[slicing,setSlicing]=useState(false),[previewBusy,setPreviewBusy]=useState(false),[progress,setProgress]=useState<EngineProgress>({stage:'',percent:null});
   const [error,setError]=useState(''),[message,setMessage]=useState(''),[settingsOpen,setSettingsOpen]=useState(false),[uploading,setUploading]=useState(false);
   const [connection,setConnection]=useState({url:storedAddress(),apiKey:''});
@@ -108,11 +109,11 @@ export default function App(){
     try{
       const worker=new Worker(new URL('./lib/gcode.worker.ts',import.meta.url),{type:'module'});previewWorker.current=worker;
       const finish=()=>{worker.terminate();if(previewWorker.current===worker){previewWorker.current=null;setPreviewBusy(false);}};
-      worker.onmessage=({data})=>{if(previewWorker.current!==worker)return;finish();if(data.error)setMessage(`G-code is ready. Preview could not load: ${data.error}`);else{setPreview(data.preview);setLayer(data.preview.layers.length);}};
+      worker.onmessage=({data})=>{if(previewWorker.current!==worker)return;finish();if(data.error)setMessage(`G-code is ready. Preview could not load: ${data.error}`);else{setPreview(data.preview);requestAnimationFrame(()=>document.querySelector('.model-region')?.scrollIntoView({behavior:'smooth',block:'start'}));}};
       worker.onerror=event=>{event.preventDefault();if(previewWorker.current!==worker)return;finish();setMessage('G-code is ready, but its preview could not load. You can still save it.');};
       worker.onmessageerror=()=>{if(previewWorker.current!==worker)return;finish();setMessage('G-code is ready, but its preview could not load. You can still save it.');};
       // Cloning a Blob does not copy the entire file into the page's JavaScript heap.
-      worker.postMessage(result.gcode);
+      worker.postMessage({kind:'supports',gcode:result.gcode});
     }catch(e){previewWorker.current?.terminate();previewWorker.current=null;setPreviewBusy(false);setMessage(`G-code is ready. Preview could not load: ${e instanceof Error?e.message:String(e)}`);}
   }
   function stopPreview(){previewWorker.current?.terminate();previewWorker.current=null;setPreviewBusy(false);}
@@ -120,14 +121,14 @@ export default function App(){
   async function save(){if(!result)return;setError('');setMessage('');try{const r=await exportGcode(result.gcode,result.name);if(r.method==='download')setMessage('Download requested. In Files, move the G-code to your USB drive.');else if(r.method==='native')setMessage('G-code saved to Files.');else if(r.method==='share')setMessage('G-code shared. Check your selected destination in Files.');}catch(e){setError(e instanceof Error?e.message:String(e));}}
   async function send(){if(!result)return;if(!connection.url){setSettingsOpen(true);return;}setUploading(true);setError('');try{const r=await uploadGcode(connection,new Uint8Array(await result.gcode.arrayBuffer()),result.name);setMessage(`Uploaded ${r.item.path}. Open Fluidd or Mainsail to start the print.`);}catch(e){setError(e instanceof Error?e.message:String(e));}finally{setUploading(false);}}
   const seconds=result?.statistics?.timeSeconds?.normal;
-  const printTime=seconds?formatTime(seconds):preview?.time||'—';
+  const printTime=seconds?formatTime(seconds):'—';
   const grams=result?.statistics?.filament?.totalMassG;
-  const filament=grams?`${grams.toFixed(1)} g`:preview?.filamentGrams&&preview.filamentGrams!=='—'?`${preview.filamentGrams} g`:'—';
+  const filament=grams?`${grams.toFixed(1)} g`:'—';
   const busy=slicing||loading||orienting;
   return <main className="app-shell"><header className="app-header"><div><h1>Pocket Slicer</h1><p>Creality K1C <span>·</span> {settings.nozzle} mm</p></div><button className="icon-button" onClick={()=>setSettingsOpen(true)} aria-label="Settings and help"><Settings size={24}/></button></header>
   {/* iOS Files can misclassify model types; validate the selected file in readModel. */}
   <input ref={input} data-testid="model-file" type="file" multiple hidden onChange={e=>{const files=Array.from(e.target.files??[]);if(files.length)void load(files);}}/>
-  <div className="workspace"><section className="model-region" aria-label="3D model preview" onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();if(!busy&&e.dataTransfer.files.length){loadMode.current='add';void load(Array.from(e.dataTransfer.files));}}}>{slicing||(tab==='preview'&&result&&!preview)?<div className="viewport save-ready-view"><div className="viewport-empty">{slicing?<LoaderCircle size={35} className="spin"/>:<Check size={35}/>}<strong>{slicing?'Slicing on your device':'Your G-code is ready'}</strong><span>{slicing?'The 3D view will return when slicing finishes.':'Save your file below. You can build a layer preview whenever you need it.'}</span></div><span className="bed-label">K1C · 220 × 220 mm</span></div>:<Viewer objects={objects} selectedId={selected?.id??null} onSelect={setSelectedId} onMove={changeObject} onFace={face} mode={viewMode} onMode={setViewMode} disabled={busy} preview={preview} layer={layer} showPreview={tab==='preview'&&!!result} dimensions={dimensions}/>}<div className="canvas-caption"><span>Tap to select · orbit or move in the view</span><span>{objects.length?`${objects.reduce((n,o)=>n+o.model.triangles,0).toLocaleString()} triangles`:'STL · OBJ · 3MF'}</span></div></section>
+  <div className="workspace"><section className="model-region" aria-label="3D model preview" onDragOver={e=>e.preventDefault()} onDrop={e=>{e.preventDefault();if(!busy&&e.dataTransfer.files.length){loadMode.current='add';void load(Array.from(e.dataTransfer.files));}}}>{slicing||(tab==='preview'&&result&&!preview)?<div className="viewport save-ready-view"><div className="viewport-empty">{slicing?<LoaderCircle size={35} className="spin"/>:<Check size={35}/>}<strong>{slicing?'Slicing on your device':'Your G-code is ready'}</strong><span>{slicing?'The 3D view will return when slicing finishes.':'Save your file below, or open the model and supports view.'}</span></div><span className="bed-label">K1C · 220 × 220 mm</span></div>:<Viewer objects={tab==='preview'&&result?.recovered?EMPTY_PLATE:objects} selectedId={selected?.id??null} onSelect={setSelectedId} onMove={changeObject} onFace={face} mode={viewMode} onMode={setViewMode} disabled={busy} preview={preview} showPreview={tab==='preview'&&!!result} dimensions={tab==='preview'&&result?.recovered?null:dimensions}/>}<div className="canvas-caption"><span>{tab==='preview'&&result?'Drag to orbit · pinch to zoom':'Tap to select · orbit or move in the view'}</span><span>{tab==='preview'&&result?.recovered?'Saved G-code':objects.length?`${objects.reduce((n,o)=>n+o.model.triangles,0).toLocaleString()} triangles`:'STL · OBJ · 3MF'}</span></div></section>
   <section className="control-region"><nav className="tabs" aria-label="Slicer views">{(['model','print','preview'] as const).map(v=><button key={v} aria-current={tab===v?'page':undefined} className={tab===v?'active':''} onClick={()=>setTab(v)}>{v[0].toUpperCase()+v.slice(1)}</button>)}</nav>
   <div className="panel">
     {tab==='model'&&<>{!model?<div className="import-panel"><FolderOpen size={30} strokeWidth={1.4}/><h2>Choose a model</h2><p>Open files from your iPhone, iCloud Drive, or USB drive.</p><button className="primary" onClick={()=>choose('add')} disabled={busy}><Upload size={18}/>{loading?'Opening…':'Import model'}</button><button className="text-button" onClick={demo} disabled={busy}>Try a 20 mm cube <ChevronRight size={16}/></button><span className="hint">STL, OBJ, or 3MF · up to 50 MB per file</span></div>:<ModelTools objects={objects} selectedId={selected?.id??null} onSelect={setSelectedId} onAdd={()=>choose('add')} onReplace={()=>choose('replace')} onDuplicate={duplicate} onDelete={()=>{commit(objects.filter(o=>o.id!==selected?.id));setSelectedId(null);}} onChange={t=>selected&&changeObject(selected.id,t)} onError={setError} onArrange={arrange} onOrient={orient} onUndo={()=>history('undo')} onRedo={()=>history('redo')} canUndo={plate.past.length>0} canRedo={plate.future.length>0} mode={viewMode} onMode={setViewMode} disabled={busy} orienting={orienting} dimensions={dimensions}/>}</>}
@@ -142,13 +143,12 @@ export default function App(){
       {!isNativeFileExportAvailable()&&<button className="text-button download-link" onClick={()=>{downloadGcode(createGcodeFile(result.gcode,result.name));setMessage('Download requested. Check Files for your G-code.');}}>Download G-code instead</button>}
       <button className="secondary" onClick={send} disabled={uploading}>{uploading?<LoaderCircle size={18} className="spin"/>:<Wifi size={18}/>} {uploading?'Uploading…':'Send to printer'}</button>
       <div className="statistics result-statistics"><div><Clock size={24}/><span>Print time<strong>{printTime}</strong></span></div><div><Spool size={24}/><span>Filament<strong>{filament}</strong></span></div></div>
-      {!preview&&!previewBusy&&<button className="secondary" onClick={buildPreview}><FileBox size={18}/>Build layer preview</button>}
-      {previewBusy&&<><p className="notice"><LoaderCircle size={16} className="spin"/> Building layer preview… Your G-code is ready to save.</p><button className="text-button download-link" onClick={stopPreview}>Cancel preview</button></>}
-      {preview&&preview.layers.length>0&&<div className="layer-control"><div><label htmlFor="layer">Layer {layer} / {preview.layers.length}</label><span>{preview.layers[layer-1]?.z.toFixed(2)} mm</span></div><input id="layer" type="range" min="1" max={preview.layers.length} value={layer} onChange={e=>setLayer(Number(e.target.value))}/><div className="legend"><span><i style={{background:'#246bfd'}}/>Walls</span><span><i style={{background:'#f59e2b'}}/>Infill</span><span><i style={{background:'#3dbb78'}}/>Supports</span></div></div>}
-      {preview?.truncated&&<p className="hint">Preview is simplified to save memory. Exported G-code contains the full print.</p>}
+      {!preview&&!previewBusy&&<button className="secondary" onClick={buildPreview}><FileBox size={18}/>Show supports</button>}
+      {previewBusy&&<><p className="notice"><LoaderCircle size={16} className="spin"/> Building support overview… Your G-code is ready to save.</p><button className="text-button download-link" onClick={stopPreview}>Cancel preview</button></>}
+      {preview&&<div className="support-overview" role="status">{preview.segments>0?<><p>{result.recovered?'Supports are green. The original model is not part of the saved G-code view.':'Supports are green. The model is translucent so you can see where they meet.'}</p><div className="legend">{!result.recovered&&<span><i style={{background:'#8195b8'}}/>Model</span>}<span><i style={{background:'#3dbb78'}}/>Supports</span></div></>:<p>Orca did not generate supports for this slice.</p>}{preview.truncated&&<p className="hint">The support view is simplified to save memory. Your G-code contains the complete supports.</p>}</div>}
       <p className="hint">Estimates come from Orca. Check the first layers before printing.</p>
       {result.storageId&&<div className="saved-copy"><p className="hint">Last completed G-code saved on this device. It can be recovered if this page reloads.</p><button className="text-button" onClick={forgetSaved}>Remove local recovery copy</button></div>}
-    </>:<div className="empty-preview"><Spool size={32} strokeWidth={1.3}/><h2>See every layer</h2><p>Slice your model to preview its toolpaths and save G-code.</p></div>}</>}
+    </>:<div className="empty-preview"><Spool size={32} strokeWidth={1.3}/><h2>Check your supports</h2><p>Slice your model to see its supports and save G-code.</p></div>}</>}
     {!result&&savedResult&&!slicing&&<div className="saved-copy notice"><strong>Last completed G-code</strong><p>{savedResult.name}{savedResult.savedAt?` · ${new Date(savedResult.savedAt).toLocaleString()}`:''}</p><button className="secondary" onClick={()=>{stopPreview();setPreview(null);setResult({...savedResult,recovered:true});setTab('preview');}}>Open saved G-code</button></div>}
     {plateCheck.warnings.map((warning,i)=><p className="notice plate-warning" key={i}>{warning}</p>)}
     {validation&&<p className="error" role="alert"><AlertCircle size={18}/>{validation}</p>}

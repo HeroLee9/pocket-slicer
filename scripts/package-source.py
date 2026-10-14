@@ -6,7 +6,7 @@ import zipfile
 root = Path(__file__).resolve().parent.parent
 destination = root / 'public/source/pocket-slicer-source.zip'
 destination.parent.mkdir(parents=True, exist_ok=True)
-excluded_dirs = {'node_modules', '.git', '.openai', 'dist', 'test-results', 'playwright-report', 'source'}
+excluded_dirs = {'node_modules', '.git', '.openai', 'dist', 'test-results', 'playwright-report', 'source', '__pycache__'}
 files = []
 for path in sorted(root.rglob('*')):
     if not path.is_file():
@@ -16,7 +16,7 @@ for path in sorted(root.rglob('*')):
         continue
     if any(part in excluded_dirs for part in relative.parts):
         continue
-    if path.name.endswith(('.tsbuildinfo', '.wasm', '.wasm.part0', '.wasm.part1')):
+    if path.name.endswith(('.pyc', '.pyo', '.tsbuildinfo', '.wasm', '.wasm.part0', '.wasm.part1')):
         continue
     files.append((path, relative))
 with zipfile.ZipFile(destination, 'w', zipfile.ZIP_DEFLATED, compresslevel=9) as archive:

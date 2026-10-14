@@ -1,20 +1,22 @@
-/* Pocket Slicer adapter. Engine artifacts remain unmodified upstream releases. */
+/* Pocket Slicer adapter for the pinned mobile OrcaWasm build. */
 'use strict';
 importScripts(new URL('gcode-validation.js', self.location.href).href);
 importScripts(new URL('result-storage.js', self.location.href).href);
+importScripts(new URL('pocket-runtime-policy.js', self.location.href).href);
 const API_VERSION = '0.7.0';
-const RELEASE = 'wasm-v2.4.2-patch29-multithreaded';
+const RELEASE = 'engine-v2.4.2-mobile1';
 const engineUrl = new URL('slicer-mt.js', self.location.href).href;
 // Split only for static hosts' per-file limits; concatenation recreates the
-// byte-identical upstream WASM (SHA-256 recorded in PROVENANCE.json).
+// custom mobile WASM (SHA-256 recorded in PROVENANCE.json).
 const wasmParts = ['slicer-mt.wasm.part0', 'slicer-mt.wasm.part1'];
-const wasmLength = 29019444;
+const wasmLength = 29003990;
 let enginePromise = null;
 let active = null;
 const loadingListeners = new Set();
+const progressReporters = new Map();
 // The upstream runtime does not expose its pthread teardown. Track only the
-// child workers created in this adapter's realm, leaving its binary and pool
-// sizing unchanged. A completed operation retires the entire runtime.
+// child workers created in this adapter's realm, preserving upstream pool
+// sizing. A completed operation retires the entire runtime.
 const childWorkers = new Set();
 const NativeWorker = self.Worker;
 self.Worker = class extends NativeWorker {
@@ -35,7 +37,12 @@ function releaseRuntime() {
 }
 
 function progress(id, stage, percent = null) {
-  self.postMessage({ type: 'progress', id, progress: { stage, percent } });
+  if (!progressReporters.has(id)) {
+    progressReporters.set(id, PocketRuntimePolicy.createProgressReporter((value) => {
+      self.postMessage({ type: 'progress', id, progress: value });
+    }));
+  }
+  progressReporters.get(id)(stage, percent);
 }
 
 function notifyLoading(stage, percent = null) {
@@ -77,6 +84,10 @@ async function loadEngine(id) {
       if (OneSlicerEngine.apiVersion !== API_VERSION) throw new Error('Engine API version does not match this app. Reload after updating.');
       const engine = await OneSlicerEngine.createEngine({ runtime: {
         wasmBinary,
+        // The headless engine uses 531 MiB on the full-size regression model.
+        // Bound native growth so larger jobs can report an allocation failure.
+        // Compiled code, worker stacks and the UI also consume browser memory.
+        wasmMemory: PocketRuntimePolicy.createMemory(768),
         mainScriptUrlOrBlob: engineUrl,
         locateFile: (name) => new URL(name, self.location.href).href,
         print: () => {},
@@ -232,8 +243,9 @@ self.onmessage = async ({ data }) => {
     self.postMessage({ type: 'result', id, result, retired: retire }, result.gcode ? [result.gcode.buffer] : []);
   } catch (error) {
     retire = true;
-    self.postMessage({ type: 'error', id, retired: true, error: { code: error.code ?? 'ENGINE', message: error.message ?? String(error) } });
+    self.postMessage({ type: 'error', id, retired: true, error: PocketRuntimePolicy.describeError(error) });
   } finally {
+    progressReporters.delete(id);
     if (retire) {
       releaseRuntime();
       self.close();
