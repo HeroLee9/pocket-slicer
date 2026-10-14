@@ -2,9 +2,13 @@
 
 A local iPhone slicer that runs the real OrcaSlicer engine on the device. Built for a Creality K1C, with G-code export to Files or a connected USB drive. No model is uploaded for slicing.
 
-The installed iPhone version under [`ios/`](ios/README.md) bundles all application and engine files so it does not depend on a hosted website. Its native simulator test has passed actual Orca slicing, and a device package has been built. Physical iPhone testing is still required. The React interface also runs in a browser for development.
+The installed iPhone version under [`ios/`](ios/README.md) bundles all application and engine files so it does not depend on a hosted website. Its native simulator test has passed actual Orca slicing, and a device package has been built. Physical iPhone testing is still required. The same React interface runs on the hosted Site, with slicing performed locally in the browser. The existing native preview release predates the newest plate tools and expert-settings changes.
 
 ## Use on iPhone
+
+Open the Pocket Slicer Site in Safari. Import models, edit the plate and settings, slice, then use **Save G-code → Save to Files** to choose your USB drive. The computer is not required. **Settings & help → Save app for offline** caches the app and engine; refresh this copy after an update. Safari can evict website storage.
+
+For the separate native preview release:
 
 Follow the [free installation guide](ios/INSTALL.md) to sign and install the unsigned IPA using SideStore. A Mac or Xcode is not required on the user's computer. Free signing needs renewal every seven days; the PC is needed for initial setup and sometimes recovery.
 
@@ -18,14 +22,21 @@ Printer upload is optional and has not been verified from the native iPhone app.
 
 ## Supported scope
 
-- STL, OBJ and 3MF geometry; one combined model, one filament.
-- Scale and rotate, automatic bed centering and grounding.
-- K1C 0.4, 0.6 and 0.8 mm profiles; PLA, PETG and ABS.
-- Layer height, infill, walls, automatic normal/tree supports, brim and temperatures.
+- STL, OBJ and 3MF geometry; up to 20 model instances on one plate, one filament.
+- Select, drag or numerically position, rotate, flip, mirror, uniform/axis scale, duplicate, delete, undo/redo, auto arrange, lay on a selected face, and worker-based automatic orientation.
+- K1C 0.4, 0.6 and 0.8 mm profiles; PLA, PETG, Elegoo Rapid PETG and ABS.
+- Quick settings and a searchable editor generated from the pinned Orca 2.4.2 option definitions, with typed validation, inherited defaults, per-option reset, local persistence, and JSON override import/export. Unsupported desktop/project/hardware features are explicitly marked unavailable.
+- Defaults: gyroid, three walls with inner/outer/inner order, 5,000 mm/s² print/travel acceleration with lower first-layer/role values retained, and the installed Creality Helper Script KAMP adaptive mesh/purge macros.
 - Actual Orca estimates and extrusion toolpaths with a layer slider.
 - Native Files export to a USB drive, bundled offline engine and optional Moonraker upload.
 
-3MF print settings, painted supports, colors, modifier volumes and multi-plate layouts are not imported. All meshes in an imported file are combined. The app limits imports to 50 MB and one million triangles; the preview shows at most 750,000 extrusion segments, while exported G-code remains complete. These limits do not guarantee a device can slice every accepted model. This version does not preserve unsaved models or G-code after a page reload.
+3MF print settings, painted supports, colors, modifier volumes and multi-plate layouts are not imported. All meshes in each imported file are combined. Separate imported models can be positioned independently, then are merged into one same-material engine object for slicing. Per-object settings and sequential printing are unavailable. The app limits each import to 50 MB and the complete plate to one million triangles; the preview shows at most 750,000 extrusion segments, while exported G-code remains complete. These limits do not guarantee a device can slice every accepted model. This version does not preserve unsaved models or G-code after a page reload.
+
+Auto orientation compares sampled contact, overhang, support height and model height; it is a heuristic and does not guarantee the best surface finish or strength.
+
+Elegoo Rapid PETG starts at 250°C nozzle / 80°C supported build plates, 18 mm³/s maximum flow and 0.99 flow ratio. It derives from Orca’s Elegoo profile with K1C-specific adjustments, and has not been calibrated on the user’s spool.
+
+KAMP mode enables `_ADAPTIVE_BED_MESH_ON` and `_ADAPTIVE_PURGE_LINE_ON`, emits object boundary polygons, and calls `START_PRINT` once. The installed Guilouz Creality Helper Script macros perform homing, meshing and purging; the slicer does not append a second mesh or purge. Standard startup remains selectable.
 
 The selected nozzle must match your hardware. K1C profiles retain `START_PRINT` and `END_PRINT`; a rooted printer must retain compatible macros. The inherited ABS bed temperature is capped at the K1C's published 100°C maximum. The engine checks explicit G-code motion bounds, but cannot inspect motion inside printer-side macros.
 
@@ -38,6 +49,7 @@ npm ci
 npm run dev
 npm test
 npm run test:engine
+node scripts/test-orca-settings.mjs
 npm run build
 npm run preview
 ```

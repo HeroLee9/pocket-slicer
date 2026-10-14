@@ -1,9 +1,10 @@
 import sourceProfiles from './k1c.json' with { type: 'json' };
 
-export type Material = 'PLA' | 'PETG' | 'ABS';
+export type Material = 'PLA' | 'PETG' | 'Elegoo Rapid PETG' | 'ABS';
 export type Quality = 'fine' | 'standard' | 'draft';
 export type Nozzle = '0.4' | '0.6' | '0.8';
 export type Support = 'off' | 'normal' | 'tree';
+export type StartupMode = 'standard' | 'kamp';
 export type BedType = 'Textured PEI Plate' | 'High Temp Plate' | 'Engineering Plate';
 export type NativeConfig = Record<string, string | number | boolean | string[]>;
 export type PrintSettings = {
@@ -17,17 +18,18 @@ export type PrintSettings = {
   nozzleTemperature: number | null;
   bedTemperature: number | null;
   bedType: BedType;
+  startupMode: StartupMode;
   layerHeight?: number | null;
   infillPattern?: 'grid' | 'gyroid' | 'rectilinear' | 'cubic';
 };
 
 export const DEFAULT_SETTINGS: PrintSettings = {
-  material: 'PLA', quality: 'standard', nozzle: '0.4', infill: 15, walls: 2,
+  material: 'PLA', quality: 'standard', nozzle: '0.4', infill: 15, walls: 3,
   support: 'off', brim: 5, nozzleTemperature: null, bedTemperature: null,
-  bedType: 'Textured PEI Plate',
+  bedType: 'Textured PEI Plate', startupMode: 'kamp', infillPattern: 'gyroid',
 };
 
-export const MATERIALS: Material[] = ['PLA', 'PETG', 'ABS'];
+export const MATERIALS: Material[] = ['PLA', 'PETG', 'Elegoo Rapid PETG', 'ABS'];
 export const QUALITIES: Quality[] = ['fine', 'standard', 'draft'];
 export const NOZZLES: Nozzle[] = ['0.4', '0.6', '0.8'];
 export const BED_TYPES: BedType[] = ['Textured PEI Plate', 'High Temp Plate', 'Engineering Plate'];
@@ -55,10 +57,11 @@ function numberInRange(value: unknown, name: string, min: number, max: number, i
 
 export function resolveSettings(input: Partial<PrintSettings> = {}): PrintSettings {
   const settings = { ...DEFAULT_SETTINGS, ...input };
-  if (!MATERIALS.includes(settings.material)) throw new RangeError('Choose PLA, PETG, or ABS.');
+  if (!MATERIALS.includes(settings.material)) throw new RangeError('Choose a supported filament preset.');
   if (!QUALITIES.includes(settings.quality)) throw new RangeError('Choose Fine, Standard, or Draft quality.');
   if (!NOZZLES.includes(settings.nozzle)) throw new RangeError('Choose a 0.4, 0.6, or 0.8 mm nozzle.');
   if (!BED_TYPES.includes(settings.bedType)) throw new RangeError('Choose a supported build plate.');
+  if (!['standard', 'kamp'].includes(settings.startupMode)) throw new RangeError('Choose standard or KAMP startup.');
   if (!['off', 'normal', 'tree'].includes(settings.support)) throw new RangeError('Choose a supported support type.');
   if (settings.infillPattern && !['grid', 'gyroid', 'rectilinear', 'cubic'].includes(settings.infillPattern)) throw new RangeError('Choose a supported infill pattern.');
   numberInRange(settings.infill, 'Infill', 0, 100);
@@ -92,7 +95,40 @@ export function buildConfig(input: Partial<PrintSettings> = {}): NativeConfig {
   config.wall_loops = String(settings.walls);
   config.sparse_infill_density = `${settings.infill}%`;
   // Orca rejects Grid/Gyroid at 100%; solid infill uses rectilinear.
-  config.sparse_infill_pattern = settings.infill === 100 ? 'rectilinear' : (settings.infillPattern ?? String(config.sparse_infill_pattern));
+  config.sparse_infill_pattern = settings.infill === 100 ? 'rectilinear' : (settings.infillPattern ?? 'gyroid');
+  config.wall_sequence = 'inner-outer-inner wall';
+  // These legacy preset aliases are not native 2.4.2 enum values. Preserve
+  // the effective defaults previously used when the engine ignored them.
+  if (config.ironing_pattern === 'zig-zag') config.ironing_pattern = 'rectilinear';
+  if (config.wall_direction === 'auto') config.wall_direction = 'ccw';
+  config.default_acceleration = '5000';
+  config.travel_acceleration = '5000';
+  // Preserve lower role/first-layer accelerations while limiting inherited
+  // profile defaults to the user's 5000 mm/s² preference. Percentages remain
+  // relative to the capped default/travel/outer-wall accelerations.
+  for (const key of ['inner_wall_acceleration', 'outer_wall_acceleration', 'top_surface_acceleration', 'initial_layer_acceleration', 'initial_layer_travel_acceleration', 'sparse_infill_acceleration', 'internal_solid_infill_acceleration', 'bridge_acceleration']) {
+    const value = config[key];
+    if (value == null) continue;
+    const text = String(value);
+    config[key] = text.endsWith('%') ? `${Math.min(Number.parseFloat(text), 100)}%` : String(Math.min(Number(text), 5000));
+  }
+  if (settings.startupMode === 'kamp') {
+    // Guilouz KAMP's START_PRINT owns homing, adaptive meshing and purging.
+    // Its mesh/purge macros read Orca's EXCLUDE_OBJECT_DEFINE polygons.
+    config.gcode_label_objects = '1';
+    config.exclude_object = '1';
+    config.machine_start_gcode = [
+      'SET_PRINT_STATS_INFO TOTAL_LAYER=[total_layer_count]',
+      'M140 S0',
+      'M104 S0',
+      '_ADAPTIVE_BED_MESH_ON',
+      '_ADAPTIVE_PURGE_LINE_ON',
+      'START_PRINT EXTRUDER_TEMP=[nozzle_temperature_initial_layer] BED_TEMP=[bed_temperature_initial_layer_single]',
+      'M204 S5000',
+      'M83',
+      'G92 E0',
+    ].join('\n');
+  }
   config.enable_support = settings.support === 'off' ? '0' : '1';
   config.support_type = settings.support === 'tree' ? 'tree(auto)' : 'normal(auto)';
   config.brim_type = settings.brim > 0 ? 'outer_only' : 'no_brim';
@@ -122,6 +158,7 @@ export function getProfileSummary(input: Partial<PrintSettings> = {}) {
     printer: PRINTER.name,
     nozzle: Number(settings.nozzle),
     material: settings.material,
+    startupMode: settings.startupMode,
     quality: settings.quality,
     profileName: sourceProfiles.processes[settings.nozzle][settings.quality].name,
     filamentProfileName: sourceProfiles.filaments[settings.material].name,
@@ -132,6 +169,9 @@ export function getProfileSummary(input: Partial<PrintSettings> = {}) {
     bedTemperature: firstNumber(config[bedKeys[settings.bedType]]),
     firstLayerBedTemperature: firstNumber(config[bedKeys[settings.bedType] + '_initial_layer']),
     maxVolumetricSpeed: firstNumber(config.filament_max_volumetric_speed),
+    infillPattern: String(config.sparse_infill_pattern),
+    wallSequence: String(config.wall_sequence),
+    acceleration: firstNumber(config.default_acceleration),
     minLayerHeight: firstNumber(config.min_layer_height),
     maxLayerHeight: firstNumber(config.max_layer_height),
   };

@@ -142,7 +142,12 @@ async function slice(id, input) {
     const bytes = new Uint8Array(input.stl);
     const manifest = makeManifest(bytes, input);
     session = await engine.createSession();
-    await session.init(new TextEncoder().encode(JSON.stringify(input.config)));
+    const configBytes = new TextEncoder().encode(JSON.stringify(input.config));
+    await session.init(configBytes);
+    // The compatibility initializer skips invalid options and empty strings.
+    // Apply the same document through API 0.7's strict profile operation so
+    // user settings fail visibly and deliberately cleared G-code stays empty.
+    await session.applyProfile('orca.native-json', configBytes);
     await session.setObjects(bytes, manifest);
     const result = await session.slice({
       schemaVersion: API_VERSION,

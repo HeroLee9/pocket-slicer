@@ -10,6 +10,25 @@ export type Transform = {scale:number; x:number; y:number; z:number};
 export const DEFAULT_TRANSFORM:Transform = {scale:100,x:0,y:0,z:0};
 const MAX_TRIANGLES = 1_000_000;
 
+function readSTL(bytes:ArrayBuffer):THREE.BufferGeometry {
+  const prefix=new TextDecoder().decode(bytes.slice(0,512));
+  const looksLikeASCII=/^\s*solid\b/.test(prefix) && !/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(prefix);
+  const faces=bytes.byteLength>=84?new DataView(bytes).getUint32(80,true):0;
+  const expectedBytes=84+faces*50;
+  // Binary headers may start with "solid" too. An exact binary length wins,
+  // as it does in STLLoader. Check counts before it allocates or reads faces.
+  if (!looksLikeASCII || expectedBytes===bytes.byteLength) {
+    if (bytes.byteLength<84) throw new Error('This STL is incomplete: its binary header is cut off. Download it again or re-export it from the original model.');
+    if (faces>MAX_TRIANGLES) throw new Error('This STL declares more than 1 million triangles. Simplify the original model before exporting it for mobile slicing.');
+    if (bytes.byteLength<expectedBytes) {
+      const complete=Math.floor((bytes.byteLength-84)/50);
+      throw new Error(`This STL is incomplete: only ${complete.toLocaleString('en-US')} of ${faces.toLocaleString('en-US')} triangles are complete. Download it again or re-export it from the original model.`);
+    }
+  }
+  try {return new STLLoader().parse(bytes);}
+  catch {throw new Error('This STL could not be read. Download it again or re-export it from the original model.');}
+}
+
 function validateGeometry(geometry:THREE.BufferGeometry) {
   const p = geometry.getAttribute('position');
   if (!p || p.count < 3 || p.count % 3 !== 0) throw new Error('This file has no usable triangular mesh. Export the model as an STL and try again.');
@@ -30,7 +49,7 @@ export async function readModel(file:File):Promise<Model> {
   const bytes=await file.arrayBuffer();
   let geometry:THREE.BufferGeometry;
   let notice:string|undefined;
-  if (ext==='stl') {try{geometry=new STLLoader().parse(bytes);}catch{throw new Error('This STL is incomplete or could not be read. Re-export it as a binary STL and try again.');}}
+  if (ext==='stl') geometry=readSTL(bytes);
   else if (ext==='obj' || ext==='3mf') {
     const group=ext==='obj'?new OBJLoader().parse(new TextDecoder().decode(bytes)):new ThreeMFLoader().parse(bytes);
     const parts:THREE.BufferGeometry[]=[];

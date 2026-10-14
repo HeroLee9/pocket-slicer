@@ -1,0 +1,27 @@
+import {useState} from 'react';
+import {Copy,FlipHorizontal2,Grid2X2,LoaderCircle,Plus,Redo2,RotateCcw,Trash2,Undo2,WandSparkles} from 'lucide-react';
+import {DEFAULT_OBJECT_TRANSFORM,rotateObject,type ObjectTransform,type PlateObject} from '../lib/geometry';
+export type ViewMode='orbit'|'move'|'face';
+type Props={objects:PlateObject[];selectedId:string|null;onSelect:(id:string)=>void;onAdd:()=>void;onReplace:()=>void;onDuplicate:()=>void;onDelete:()=>void;onChange:(value:ObjectTransform)=>void;onError:(message:string)=>void;onArrange:()=>void;onOrient:()=>void;onUndo:()=>void;onRedo:()=>void;canUndo:boolean;canRedo:boolean;mode:ViewMode;onMode:(mode:ViewMode)=>void;disabled:boolean;orienting:boolean;dimensions:number[]|null};
+const axes=['X','Y','Z'] as const;
+export default function ModelTools(p:Props){
+  const [tool,setTool]=useState<'move'|'rotate'|'scale'>('move');
+  const selected=p.objects.find(o=>o.id===p.selectedId)??p.objects[0];if(!selected)return null;
+  const t=selected.transform;
+  const update=(patch:Partial<ObjectTransform>)=>p.onChange({...t,...patch});
+  const turn=(axis:'x'|'y'|'z',degrees:number)=>{try{p.onChange(rotateObject(t,axis,degrees));}catch(e){p.onError(e instanceof Error?e.message:String(e));}};
+  const number=(label:string,key:keyof ObjectTransform,unit:string,step=1)=><label key={key}>{label}<div className="number-unit"><input aria-label={label} type="number" step={step} value={typeof t[key]==='number'&&Number.isFinite(t[key])?Number((t[key] as number).toFixed(3)):''} onChange={e=>update({[key]:e.target.valueAsNumber})}/><span>{unit}</span></div></label>;
+  return <fieldset className="model-tools" disabled={p.disabled}>
+    <div className="plate-heading"><strong>Build plate <span>{p.objects.length} {p.objects.length===1?'model':'models'}</span></strong><div><button className="icon-button" aria-label="Undo model change" onClick={p.onUndo} disabled={!p.canUndo||p.disabled}><Undo2 size={18}/></button><button className="icon-button" aria-label="Redo model change" onClick={p.onRedo} disabled={!p.canRedo||p.disabled}><Redo2 size={18}/></button><button className="icon-button" aria-label="Add models" onClick={p.onAdd}><Plus size={20}/></button></div></div>
+    <label className="model-select">Selected model<select value={selected.id} onChange={e=>p.onSelect(e.target.value)}>{p.objects.map((o,i)=><option key={o.id} value={o.id}>{i+1}. {o.model.name}</option>)}</select></label>
+    <div className="file-row"><div><strong>{selected.model.name}</strong><span>{p.dimensions?.map(v=>v.toFixed(1)).join(' × ')} mm</span></div><button className="icon-button" aria-label="Duplicate model" title="Duplicate" onClick={p.onDuplicate}><Copy size={18}/></button><button className="icon-button" aria-label="Delete model" title="Delete" onClick={p.onDelete}><Trash2 size={18}/></button></div>
+    <div className="tool-tabs" aria-label="Model tools">{(['move','rotate','scale'] as const).map(v=><button key={v} aria-pressed={tool===v} onClick={()=>{setTool(v);p.onMode(v==='move'?'move':'orbit');}}>{v[0].toUpperCase()+v.slice(1)}</button>)}</div>
+    {tool==='move'&&<div className="tool-fields"><div className="three-fields">{axes.map(a=>number(`Position ${a}`,`position${a}`,'mm',0.1))}</div><div className="small-actions"><button onClick={()=>update({positionX:110,positionY:110})}>Center on bed</button><button onClick={()=>update({positionZ:0})}>Drop to bed</button></div><p className="hint">X / Y locate the model’s center. Z is its height above the bed. Choose Move in the view to drag a model.</p></div>}
+    {tool==='rotate'&&<div className="tool-fields"><div className="three-fields">{axes.map(a=>number(`Rotate ${a} degrees`,a.toLowerCase() as 'x'|'y'|'z','°',1))}</div><div className="small-actions">{axes.map(a=><button key={a} onClick={()=>turn(a.toLowerCase() as 'x'|'y'|'z',90)}>+90° {a}</button>)}</div><div className="small-actions">{axes.map(a=><button key={a} onClick={()=>turn(a.toLowerCase() as 'x'|'y'|'z',180)}>Flip {a}</button>)}</div></div>}
+    {tool==='scale'&&<div className="tool-fields">{number('Scale percent','scale','%',1)}<div className="three-fields">{axes.map(a=>number(`Scale ${a} percent`,`scale${a}`,'%',1))}</div><p className="hint">Overall scale keeps proportions. Axis scales stretch the model independently.</p></div>}
+    <div className="small-actions mirror-actions">{axes.map(a=><button key={a} aria-pressed={t[`mirror${a}`]} onClick={()=>update({[`mirror${a}`]:!t[`mirror${a}`]})}><FlipHorizontal2 size={14}/>Mirror {a}</button>)}</div>
+    <div className="model-action-grid"><button className="secondary" onClick={p.onOrient} disabled={p.disabled||p.orienting}>{p.orienting?<LoaderCircle className="spin" size={16}/>:<WandSparkles size={16}/>}Auto orient</button><button className="secondary" aria-pressed={p.mode==='face'} onClick={()=>p.onMode(p.mode==='face'?'orbit':'face')}>Lay on face</button><button className="secondary" onClick={p.onArrange}><Grid2X2 size={16}/>Auto arrange</button><button className="secondary" onClick={()=>p.onChange({...DEFAULT_OBJECT_TRANSFORM})}><RotateCcw size={16}/>Reset model</button></div>
+    <div className="small-actions model-bottom"><button onClick={p.onReplace}>Replace selected</button><button onClick={p.onAdd}>Add models</button></div>
+    <p className="hint">Auto orient compares contact area, overhangs, and height. Check the result before slicing. All models share the selected print settings.</p>
+  </fieldset>;
+}

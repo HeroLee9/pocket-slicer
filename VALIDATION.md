@@ -2,6 +2,19 @@
 
 This app uses the actual pinned OrcaWasm engine in a worker. The native iOS simulator and Linux browser checks below are separate from physical iPhone and printer testing, which remains pending.
 
+## Plate tools and expert settings update
+
+The current Sites source adds multiple model instances, plate manipulation, expert settings and Elegoo Rapid PETG. The previously released native IPA has not been rebuilt for this update.
+
+- 55 shared tests passed, including mirrored winding, immutable source meshes, absolute plate coordinates, bed/brim bounds, arrangement, diagonal face orientation, typed parameter validation and reviewed profile imports.
+- All 474 editable options from the pinned Orca 2.4.2 catalog were accepted by the actual WASM strict profile parser. The other 203 catalog entries explain unsupported hardware, desktop or project capabilities. Three real-engine scenarios verified changed layer heights, walls, infill, cooling, retraction, speeds, acceleration, custom/empty G-code, ironing and fuzzy skin in output. Run `node scripts/test-orca-settings.mjs`.
+- Mobile WebKit at 393 × 852 and Chromium at 1440 × 1050 passed XYZ positioning, drop to bed, uniform/axis scaling, flips, mirrors, auto orientation, real canvas face selection and dragging, duplication, arrangement, deletion and undo/redo. Both exported the same 652,599-byte, 40-layer two-model plate with 9,619 extrusion moves. There were no page errors or external HTTP requests; Chromium emitted only software GPU performance notices.
+- Mobile WebKit passed a complete expert-settings flow: default migration, Elegoo selection, search, numeric/enum/G-code edits, invalid temperature and layer checks, reviewed import with excluded-key disclosure, override/full-profile downloads, local persistence and actual slicing. Export contained 417,443 bytes and 80 layers with the requested overrides. Removing row content-visibility prevented row-height changes from shifting the Slice button during mobile scrolling.
+- Elegoo Rapid PETG sliced on 0.4, 0.6 and 0.8 mm profiles with 250°C nozzle and 80°C bed. The profile has not been physically calibrated on the user's spool.
+- KAMP tests found object polygons before exactly one START_PRINT and both adaptive selectors. A separated, transformed and mirrored two-part test retained exact XY bounds of 35–180 and 45–140 mm; extrusion remained on both separate islands. Requested defaults produced gyroid, inner/outer/inner, and no M204 command above 5000 mm/s².
+
+Browser plugin was not available; local Playwright used the installed WebKit/Chromium runtimes. Screenshots and JSON evidence remain outside the source repository in the task workspace. Physical iPhone/USB and printer-side KAMP behavior remain untested; no printer command or print job was sent.
+
 ## Native iOS
 
 [GitHub Actions run 38476026700](https://github.com/HeroLee9/pocket-slicer/actions/runs/38476026700), source commit `7b66aa9511c4475a4696c172bdb364083d2414f7`, passed with Xcode 26.6 on the selected iPhone 17 Pro simulator. The actual `WKWebView` test confirmed a secure loopback context, cross-origin isolation, SharedArrayBuffer and shared WebAssembly memory using public APIs. Orca 2.4.2/API 0.7.0 sliced the cube into 100 layers, 252,604 bytes and 4,909 G0/G1 lines containing extrusion values. START_PRINT, END_PRINT, M83 and progress callbacks were verified.
@@ -12,7 +25,7 @@ The release build produced an unsigned `iphoneos` ARM64 IPA with iOS 17 minimum 
 
 ## Browser and shared code
 
-- 29 unit tests passed for settings, profiles, G-code preview parsing, printable bounds and file delivery, including native bridge byte integrity, waiting for export confirmation, cancellation/error handling and the 64 MB payload limit.
+- 34 unit tests passed for settings, profiles, G-code preview parsing, printable bounds and file delivery, including native bridge byte integrity, waiting for export confirmation, cancellation/error handling and the 64 MB payload limit. STL checks cover complete binary/ASCII files, ambiguous binary headers, partial records, short headers and excessive declared triangle counts. Truncated binary models are rejected before parser allocation; missing geometry is never silently dropped or fabricated.
 - Eight actual engine configurations passed: PLA, PETG, ABS, 0.6 mm and 0.8 mm nozzles, 100% infill, normal supports and tree supports. Generated motion, temperatures, extrusion and K1C start/end macros were checked.
 - The default 20 mm cube produced 252,604 bytes of G-code, 100 layers and 6,219 extrusion moves. Orca estimated 3.73 g and 17 minutes 29 seconds.
 - Chromium and WebKit passed model import, real slicing, layer preview and G-code download. Mobile and desktop layouts were inspected. Cancellation, invalid input, retry, empty numeric fields and invalidation of stale output were exercised.
